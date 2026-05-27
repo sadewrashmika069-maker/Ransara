@@ -55,7 +55,8 @@ Sparky({
     results.forEach((movie, idx) => {
       listMsg += `${idx+1}. ${movie.title}\n`;
     });
-    listMsg += `\n📌 *ඊළඟ පියවර:* ඔබට අවශ්‍ය චිත්‍රපටයේ අංකය මෙම පණිවිඩයට *Reply* කරන්න.`;
+    listMsg += `\n📌 *ඊළඟ පියවර:* ඔබට අවශ්‍ය චිත්‍රපටයේ අංකය **පෙරවරු සමඟ** මෙම පණිවිඩයට *Reply* කරන්න.\n`;
+    listMsg += `💡 *උදා:* \`${m.prefix}1\` (අංක 1 සඳහා)`;
 
     const sentMsg = await client.sendMessage(m.jid, { text: listMsg }, { quoted: m });
 
@@ -64,6 +65,7 @@ Sparky({
       results: results,
       listMsgId: sentMsg.key.id,
       query: query,
+      prefix: m.prefix
     });
     setSessionTimeout(userJid);
     await m.react("✅");
@@ -75,11 +77,10 @@ Sparky({
   }
 });
 
-// 🔥 FIX: Command to capture numbers without prefix
+// This command will trigger when user types .1, .2, etc. (number with prefix)
 Sparky({
   name: "subreply",
   pattern: /^\d+$/,
-  dontPrefix: true,          // <-- This allows the command to trigger without a dot
   fromMe: false,
   dontAddCommandList: true,
   desc: "internal"
@@ -131,7 +132,7 @@ Sparky({
     if (subLink) {
       qualMsg += `\n🔤 *උපසිරැසි (SRT)* පමණක් අවශ්‍ය නම් ${videoLinks.length+1} එවන්න.`;
     }
-    qualMsg += `\n\n📌 *පියවර:* ඔබට අවශ්‍ය ගුණාත්මක අංකය මෙම පණිවිඩයට *Reply* කරන්න.`;
+    qualMsg += `\n\n📌 *පියවර:* ඔබට අවශ්‍ය ගුණාත්මක අංකය **පෙරවරු සමඟ** මෙම පණිවිඩයට *Reply* කරන්න.\n💡 *උදා:* \`${session.prefix}2\``;
 
     const qualSent = await client.sendMessage(m.jid, { text: qualMsg }, { quoted: m });
 
@@ -151,7 +152,6 @@ Sparky({
     const subLink = session.subLink;
     const idx = number - 1;
 
-    // Subtitle only option
     if (subLink && idx === videoLinks.length) {
       await client.sendMessage(m.jid, {
         text: `✅ *${session.selectedTitle}* - උපසිරැසි SRT\n\n📥 *සබැඳිය:* ${subLink.direct_link}`
