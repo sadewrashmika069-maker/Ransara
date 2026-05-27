@@ -8,7 +8,7 @@ const httpsAgent = new https.Agent({
 
 Sparky(
   {
-    name: "tiktok",
+    name: "tt",
     fromMe: isPublic,
     category: "downloader",
     desc: "Download TikTok videos in HD if available.",
