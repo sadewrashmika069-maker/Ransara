@@ -54,8 +54,10 @@ module.exports = {
 	DATABASE,
 	DISABLE_PM: toBool(process.env.DISABLE_PM || "false"),
 	GROQ_API_KEY: process.env.GROQ_API_KEY || "",
-	// 👇 GEMINI API KEY එක මෙතන add කළා
+	// 👇 GEMINI API KEY
 	GEMINI_API_KEY: process.env.GEMINI_API_KEY || "AIzaSyAVsxiD327yX3nqKLOz4HpIcH0smJJWFHg",
+	// 👇 SINHALASUB API KEY (added)
+	SINHALASUB_API_KEY: process.env.SINHALASUB_API_KEY || "zanta_fCZXpI08BXyizOiRJlDBShW6",
 	HANDLERS: (process.env.HANDLERS || process.env.HANDLER || process.env.PREFIX || ".").trim(),
 	HEROKU_API_KEY: process.env.HEROKU_API_KEY || "",
 	HEROKU_APP_NAME: process.env.HEROKU_APP_NAME || "",
