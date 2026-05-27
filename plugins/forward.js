@@ -1,35 +1,22 @@
-// commands/forward.js - Owner check fixed
+// commands/forward.js - Owner check removed (anyone can use)
 const { Sparky } = require("../lib");
-const config = require("../config");
 
-// ආරක්ෂක සැකසුම්
+// ආරක්ෂක සැකසුම් (same as before)
 const SAFETY = {
   MAX_JIDS: 20,
   BASE_DELAY: 2000,
   EXTRA_DELAY: 4000,
 };
 
-// Helper function to check if sender is owner
-function isOwner(sender) {
-  // sender format: "947xxxxxxxx@s.whatsapp.net"
-  let senderNumber = sender.split("@")[0];
-  let sudoList = config.SUDO ? config.SUDO.split(",").map(s => s.trim()) : [];
-  // Also check if sender is the bot's own number? Add if needed
-  return sudoList.includes(senderNumber);
-}
-
 Sparky({
   name: "forward",
-  category: "owner",
-  fromMe: false,      // අපිම check කරන නිසා false
-  desc: "📨 උපුටා දක්වන ලද පණිවිඩය ගෘප් කිහිපයකට තොග වශයෙන් forward කරයි",
+  category: "tools",           // category owner වෙනුවට tools
+  fromMe: false,                // public command
+  desc: "📨 උපුටා දක්වන ලද පණිවිඩය ගෘප් කිහිපයකට තොග වශයෙන් forward කරයි (සැමට අවසර)",
   alias: ["fwd"]
 }, async ({ client, m, args }) => {
   try {
-    // ===== [Owner Check] =====
-    if (!isOwner(m.sender)) {
-      return m.reply("*📛 හිමිකරුට පමණක් අවසර*");
-    }
+    // ===== [Owner check එක සම්පූර්ණයෙන්ම ඉවත් කර ඇත] =====
 
     // ===== [Reply check] =====
     if (!m.quoted) {
