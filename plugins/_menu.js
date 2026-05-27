@@ -16,14 +16,29 @@ Sparky({
     args
 }) => {
     try {
-        // ========== පළමුව: ඔයාගේ command එක එව්වාට පස්සේ කියවීම ==========
-        // මෙතනදි category එකක number එකක් එව්වද කියලා check කරනවා
+        // ========== FIX: args එක හරියට check කරන්න ==========
+        // args එක array එකක්ද? string එකක්ද? undefinedද? කියලා බලන්න
         
-        let userMessage = args.join(" ").trim();
+        let userInput = "";
         
-        // යවපු message එක number එකක්ද කියලා check කරන්න
-        if (userMessage && /^[0-9]+$/.test(userMessage)) {
-            let selectedNum = parseInt(userMessage);
+        // args එකේ type එක අනුව handle කරන්න
+        if (args && typeof args === 'object' && Array.isArray(args)) {
+            // args array එකක් නම්
+            userInput = args.join(" ").trim();
+        } else if (args && typeof args === 'string') {
+            // args string එකක් නම්
+            userInput = args.trim();
+        } else if (args && typeof args === 'object') {
+            // args object එකක් නම් (උදා: {0: "2"})
+            userInput = Object.values(args).join(" ").trim();
+        } else {
+            // args එකක් නැත්නම්
+            userInput = "";
+        }
+        
+        // ========== category number එකක් එව්වාද check කරන්න ==========
+        if (userInput && /^[0-9]+$/.test(userInput)) {
+            let selectedNum = parseInt(userInput);
             
             // categories define කරන්න
             const categoriesList = [
@@ -42,49 +57,44 @@ Sparky({
                 // ඒ category එකට අදාල commands හොයන්න
                 let catCommands = [];
                 
-                commands.forEach(cmd => {
-                    if (cmd.dontAddCommandList) return;
-                    
-                    let cmdName = cmd.name;
-                    if (typeof cmdName === 'object' && cmdName.source) {
-                        cmdName = cmdName.source.split('\\s*')[1]?.toString().match(/([a-z0-9]+)/i)?.[1] || "";
-                    }
-                    
-                    let cmdCategory = (cmd.category || "other").toLowerCase();
-                    let cmdDesc = (cmd.desc || "").toLowerCase();
-                    
-                    // command එක මේ category එකට අදාලද කියලා check කරන්න
-                    let isInCategory = false;
-                    
-                    if (cmdCategory === selectedCat.name.toLowerCase()) {
-                        isInCategory = true;
-                    } else {
-                        // නැත්නම් keywords වලින් check කරන්න
-                        for (let kw of selectedCat.keywords) {
-                            if (cmdDesc.includes(kw) || (cmdName && cmdName.includes(kw))) {
-                                isInCategory = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (isInCategory && cmdName) {
-                        catCommands.push(cmdName);
-                    }
-                });
-                
-                // අනෙක් commands category එකට දාන්න (OTHER සඳහා)
-                if (selectedCat.name === "OTHER") {
-                    const allCatNames = categoriesList.map(c => c.name.toLowerCase());
+                if (commands && Array.isArray(commands)) {
                     commands.forEach(cmd => {
                         if (cmd.dontAddCommandList) return;
+                        
                         let cmdName = cmd.name;
-                        if (typeof cmdName === 'object' && cmdName.source) {
-                            cmdName = cmdName.source.split('\\s*')[1]?.toString().match(/([a-z0-9]+)/i)?.[1] || "";
+                        let cmdNameStr = "";
+                        
+                        if (typeof cmdName === 'object' && cmdName && cmdName.source) {
+                            let match = cmdName.source.split('\\s*')[1]?.toString().match(/([a-z0-9]+)/i);
+                            cmdNameStr = match ? match[1] : "";
+                        } else if (typeof cmdName === 'string') {
+                            cmdNameStr = cmdName;
+                        } else if (cmdName && typeof cmdName === 'object') {
+                            cmdNameStr = Object.values(cmdName)[0] || "";
                         }
+                        
                         let cmdCategory = (cmd.category || "other").toLowerCase();
-                        if (!allCatNames.includes(cmdCategory) && cmdName && !catCommands.includes(cmdName)) {
-                            catCommands.push(cmdName);
+                        let cmdDesc = (cmd.desc || "").toLowerCase();
+                        
+                        // command එක මේ category එකට අදාලද කියලා check කරන්න
+                        let isInCategory = false;
+                        
+                        if (cmdCategory === selectedCat.name.toLowerCase()) {
+                            isInCategory = true;
+                        } else {
+                            // නැත්නම් keywords වලින් check කරන්න
+                            for (let kw of selectedCat.keywords) {
+                                if (cmdDesc.includes(kw) || cmdNameStr.includes(kw)) {
+                                    isInCategory = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (isInCategory && cmdNameStr && cmdNameStr !== "unknown" && cmdNameStr !== "") {
+                            if (!catCommands.includes(cmdNameStr)) {
+                                catCommands.push(cmdNameStr);
+                            }
                         }
                     });
                 }
@@ -101,19 +111,20 @@ Sparky({
 
                 if (catCommands.length > 0) {
                     catCommands.sort().forEach((cmd, idx) => {
-                        categoryMenu += `│ ${(idx+1).toString().padStart(2)}. ${cmd}\n`;
+                        let num = (idx + 1).toString().padStart(2);
+                        categoryMenu += `│ ${num}. ${cmd}\n`;
                     });
                 } else {
-                    categoryMenu += `│    📭 commands නැත\n`;
+                    categoryMenu += `│    📭 කිසිදු command එකක් නැත\n`;
                 }
 
                 categoryMenu += `
 └────────────────────────────┘
 
 💡 *භාවිතය*
-┣ ➤ ${m.prefix}${cmdName} [command]
-┣ ➤ ${m.prefix}menu - ප්‍රධාන මෙනුවට
-┗ ➤ ${m.prefix}menu [number] - category එක බලන්න
+┣ ➤ ${m.prefix || "."}menu [number] - category එක බලන්න
+┣ ➤ ${m.prefix || "."}menu - ප්‍රධාන මෙනුවට
+┗ ➤ ${m.prefix || "."}help - උදව් සඳහා
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ⚡ ${selectedCat.name} SECTION ⚡
@@ -126,12 +137,11 @@ Sparky({
         
         // ========== ප්‍රධාන මෙනුව (categories list එක) ==========
         let uptime = await m.uptime();
-        let [date, time] = new Date().toLocaleString("en-IN", {
-            timeZone: "Asia/Colombo"
-        }).split(",");
+        let now = new Date();
+        let date = now.toLocaleDateString("en-IN", { timeZone: "Asia/Colombo" });
+        let time = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Colombo" });
         
         let botName = config.BOT_INFO ? config.BOT_INFO.split(";")[0] : "SADEW MINI";
-        let owner = config.BOT_INFO ? config.BOT_INFO.split(";")[1] : "Sadew";
         
         let mainMenu = `
 ╔══════════════════════════════════╗
@@ -147,7 +157,7 @@ Sparky({
 │ 📅 දිනය    : ${date}
 │ ⏰ වේලාව    : ${time}
 │ ⚡ වැඩ කල කාලය : ${uptime}
-│ 📦 ප්ලගින් : ${commands.length}
+│ 📦 ප්ලගින් : ${commands ? (Array.isArray(commands) ? commands.length : 0) : 0}
 │ 🔰 පෙරවරු : ${m.prefix || "."}
 └──────────────────────────────────┘
 
@@ -155,56 +165,42 @@ Sparky({
 │        📚 CATEGORIES             │
 ├──────────────────────────────────┤
 │                                  
-│  ┌────────────────────────────┐
-│  │ 1. 📥 DOWNLOAD MENU        │
-│  │    YT, FB, IG වීඩියෝ      │
-│  └────────────────────────────┘
+│  1. 📥 DOWNLOAD MENU              
+│     YT, FB, IG වීඩියෝ           
 │
-│  ┌────────────────────────────┐
-│  │ 2. 🧠 AI MENU              │
-│  │    ChatGPT, Gemini, Bot    │
-│  └────────────────────────────┘
+│  2. 🧠 AI MENU                    
+│     ChatGPT, Gemini, Bot          
 │
-│  ┌────────────────────────────┐
-│  │ 3. 👥 GROUP MENU           │
-│  │    Group එක manage කරන්න   │
-│  └────────────────────────────┘
+│  3. 👥 GROUP MENU                 
+│     Group එක manage කරන්න         
 │
-│  ┌────────────────────────────┐
-│  │ 4. ⚙️ ADMIN MENU           │
-│  │    Admin වැඩ කටයුතු       │
-│  └────────────────────────────┘
+│  4. ⚙️ ADMIN MENU                 
+│     Admin වැඩ කටයුතු             
 │
-│  ┌────────────────────────────┐
-│  │ 5. 🔧 TOOLS MENU           │
-│  │    Sticker, QR, Converter  │
-│  └────────────────────────────┘
+│  5. 🔧 TOOLS MENU                 
+│     Sticker, QR, Converter        
 │
-│  ┌────────────────────────────┐
-│  │ 6. 👑 OWNER MENU           │
-│  │    Bot පාලනය සඳහා        │
-│  └────────────────────────────┘
+│  6. 👑 OWNER MENU                 
+│     Bot පාලනය සඳහා              
 │
-│  ┌────────────────────────────┐
-│  │ 7. 📁 OTHER MENU           │
-│  │    වෙනත් විධාන            │
-│  └────────────────────────────┘
+│  7. 📁 OTHER MENU                 
+│     වෙනත් විධාන                  
 │
 └──────────────────────────────────┘
 
 ┌──────────────────────────────────┐
-│         💡 HOW TO USE            │
+│         💡 HOW TO USE             │
 ├──────────────────────────────────┤
 │                                  
-│  ✨ අංකයක් එවන්න :             
+│  📌 අංකයක් එවන්න :               
 │                                  
-│     ${m.prefix || "."}menu 1  - DOWNLOAD menu
-│     ${m.prefix || "."}menu 2  - AI menu
-│     ${m.prefix || "."}menu 3  - GROUP menu
-│     ${m.prefix || "."}menu 4  - ADMIN menu
-│     ${m.prefix || "."}menu 5  - TOOLS menu
-│     ${m.prefix || "."}menu 6  - OWNER menu
-│     ${m.prefix || "."}menu 7  - OTHER menu
+│     ${m.prefix || "."}menu 1  → DOWNLOAD
+│     ${m.prefix || "."}menu 2  → AI
+│     ${m.prefix || "."}menu 3  → GROUP
+│     ${m.prefix || "."}menu 4  → ADMIN
+│     ${m.prefix || "."}menu 5  → TOOLS
+│     ${m.prefix || "."}menu 6  → OWNER
+│     ${m.prefix || "."}menu 7  → OTHER
 │
 └──────────────────────────────────┘
 
@@ -218,6 +214,7 @@ Sparky({
         
     } catch (e) {
         console.log("Menu error:", e);
-        m.reply(`❌ සමාවන්න, මෙනුව පෙන්වන්න බැරි වුණා.\n📝 Error: ${e.message}`);
+        console.log("Error stack:", e.stack);
+        m.reply(`❌ සමාවන්න, මෙනුව පෙන්වන්න බැරි වුණා.\n\n📝 *Error:* ${e.message}\n\n💡 උපදෙස්: ${m.prefix || "."}help`);
     }
 });
