@@ -54,6 +54,8 @@ module.exports = {
 	DATABASE,
 	DISABLE_PM: toBool(process.env.DISABLE_PM || "false"),
 	GROQ_API_KEY: process.env.GROQ_API_KEY || "",
+	// 👇 GEMINI API KEY එක මෙතන add කළා
+	GEMINI_API_KEY: process.env.GEMINI_API_KEY || "AIzaSyCnxcxRsqiPFKeuxrj8gGrbWBnz-NxAxBo",
 	HANDLERS: (process.env.HANDLERS || process.env.HANDLER || process.env.PREFIX || ".").trim(),
 	HEROKU_API_KEY: process.env.HEROKU_API_KEY || "",
 	HEROKU_APP_NAME: process.env.HEROKU_APP_NAME || "",
@@ -77,7 +79,7 @@ module.exports = {
 	SUDO: process.env.SUDO || "94783360267",
 	WORK_TYPE: process.env.WORK_TYPE || "public",
 	SAVE_STATUS: toBool(process.env.SAVE_STATUS || "false"),
-	STATUS_REPLY: toBool(process.env.STATUS_REPLY || "true"),
+	STATUS_REPLY: toBool(process.env.STATUS_REPLY || "false"),
 	STATUS_REPLY_MSG: process.env.STATUS_REPLY_MSG || "Nice Status Brother! ✨ - SADEW-MD",
 	STATUS_REACTION: toBool(process.env.STATUS_REACTION || "false"),
 	STATUS_REACTION_EMOJI: process.env.STATUS_REACTION_EMOJI || "🍉,🍓,🎀,💀,💗,📍,🔪,🛒,☠️,🐍,👍🏻",
