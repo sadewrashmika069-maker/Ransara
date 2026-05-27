@@ -1,7 +1,7 @@
 name: SADEW-MD-WORKFLOW
 
 on:
-  workflow_dispatch: # <--- මේක විතරක් තිබුණම ඇති. එතකොට ඔයා manual run කරන එක විතරයි වැඩ කරන්නේ.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -19,6 +19,7 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install --force
+          npm install @google/generative-ai
           npm install -g pm2
 
       - name: Start SADEW-MD
