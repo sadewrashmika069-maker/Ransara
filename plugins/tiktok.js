@@ -15,7 +15,7 @@ Sparky(
   },
   async ({ m, client, args }) => {
     if (!args || args.trim() === "") {
-      return await client.sendMessage(m.jid, { text: "❌ *Usage:* `.tiktok <URL>`" }, { quoted: m });
+      return await client.sendMessage(m.jid, { text: "❌ *Usage:* `.tt <URL>`" }, { quoted: m });
     }
 
     // Improved URL validation
