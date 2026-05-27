@@ -7,7 +7,7 @@
   "stack": "container",
   "env": {
     "SESSION_ID": {
-      "description": "Paste your WhatsApp Session ID here (Required).",
+      "description": "A-S-W-I-N-S-P-A-R-K-Y:faba11be67adc697405597bd483102be",
       "required": true
     },
     "HANDLERS": {
