@@ -18,8 +18,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          npm install --force
-          npm install @google/generative-ai
+          npm install --legacy-peer-deps --force
+          npm install @google/generative-ai --legacy-peer-deps
           npm install -g pm2
 
       - name: Start SADEW-MD
