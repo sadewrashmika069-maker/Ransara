@@ -10,6 +10,24 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 // එක් එක් user ගේ chat history තියාගන්න Map එකක්
 const userHistory = new Map();
 
+// ========== args එක හරියට handle කරන function එක ==========
+function getArgs(args) {
+    // args array එකක් නම්
+    if (args && Array.isArray(args)) {
+        return args.join(" ").trim();
+    }
+    // args string එකක් නම්
+    if (args && typeof args === 'string') {
+        return args.trim();
+    }
+    // args object එකක් නම් (උදා: {0: "hello"})
+    if (args && typeof args === 'object') {
+        return Object.values(args).join(" ").trim();
+    }
+    // එකක් නැත්නම්
+    return "";
+}
+
 Sparky({
     name: "gemini",
     category: "ai",
@@ -17,12 +35,23 @@ Sparky({
     desc: "🤖 Gemini AI සමඟ කතා කරන්න"
 }, async ({ client, m, args }) => {
     try {
-        // ඔයාගේ message එක ගන්න
-        let userMessage = args.join(" ");
+        // ========== FIX: args එක හරියට ගන්න ==========
+        let userMessage = getArgs(args);
         
         // message එකක් නැත්නම්
-        if (!userMessage) {
-            return m.reply(`🤖 *Gemini AI Assistant*\n\n💡 *භාවිතය:*\n${m.prefix}gemini [ඔයාගේ ප්‍රශ්නය]\n\n📝 *උදාහරණ:*\n${m.prefix}gemini කොහොමද ඔයා?\n${m.prefix}gemini කවියක් කියන්න\n${m.prefix}gemini හේතුව මොකක්ද?\n\n🔄 *History reset:*\n${m.prefix}resetgemini`);
+        if (!userMessage || userMessage === "") {
+            return m.reply(`🤖 *Gemini AI Assistant*
+
+💡 *භාවිතය:*
+${m.prefix}gemini [ඔයාගේ ප්‍රශ්නය]
+
+📝 *උදාහරණ:*
+${m.prefix}gemini කොහොමද ඔයා?
+${m.prefix}gemini කවියක් කියන්න
+${m.prefix}gemini හේතුව මොකක්ද?
+
+🔄 *History reset:*
+${m.prefix}resetgemini`);
         }
         
         // API key එක check කරන්න
@@ -64,7 +93,11 @@ Sparky({
         userHistory.set(m.sender, history);
         
         // Reply එක send කරන්න
-        let finalReply = `🤖 *Gemini AI*\n━━━━━━━━━━━━━━━━━━━━\n${reply}\n━━━━━━━━━━━━━━━━━━━━\n💡 *Tip:* ${m.prefix}resetgemini - history එක reset කරන්න`;
+        let finalReply = `🤖 *Gemini AI*
+━━━━━━━━━━━━━━━━━━━━
+${reply}
+━━━━━━━━━━━━━━━━━━━━
+💡 *Tip:* ${m.prefix}resetgemini - history එක reset කරන්න`;
         
         await m.reply(finalReply);
         
@@ -72,19 +105,19 @@ Sparky({
         console.error("Gemini command error:", error);
         
         // Error එක handle කරන්න
-        if (error.message.includes("API key")) {
+        if (error.message && error.message.includes("API key")) {
             m.reply("❌ API key එක වලංගු නැහැ! කරුණාකර නිවැරදි API key එකක් config එකට දාන්න.");
-        } else if (error.message.includes("rate limit")) {
+        } else if (error.message && error.message.includes("rate limit")) {
             m.reply("⏰ විනාඩියකට requests ගාන ඉක්මවා ගියා. ටික වෙලාවකින් නැවත උත්සාහ කරන්න.");
-        } else if (error.message.includes("safety")) {
+        } else if (error.message && error.message.includes("safety")) {
             m.reply("⚠️ සමාවන්න, ආරක්ෂක හේතූන් මත මම ඒ ප්‍රශ්නයට පිළිතුරු දෙන්නේ නැහැ.");
         } else {
-            m.reply(`❌ සමාවන්න, යම් දෝෂයක් සිදු විය.\n📝 *Error:* ${error.message.substring(0, 100)}`);
+            m.reply(`❌ සමාවන්න, යම් දෝෂයක් සිදු විය.\n📝 *Error:* ${error.message ? error.message.substring(0, 100) : "Unknown error"}`);
         }
     }
 });
 
-// Reset command එක
+// ========== Reset command එක ==========
 Sparky({
     name: "resetgemini",
     category: "ai",
@@ -93,7 +126,11 @@ Sparky({
 }, async ({ client, m }) => {
     try {
         userHistory.delete(m.sender);
-        await m.reply("✅ *Success!*\n\nඔයාගේ Gemini AI chat history එක සාර්ථකව මකා දමන ලදි!\n\n💡 දැන් නව සංවාදයක් ආරම්භ කරන්න: `.gemini හේතුව මොකක්ද`");
+        await m.reply(`✅ *Success!*
+
+ඔයාගේ Gemini AI chat history එක සාර්ථකව මකා දමන ලදි!
+
+💡 දැන් නව සංවාදයක් ආරම්භ කරන්න: \`${m.prefix}gemini හේතුව මොකක්ද\``);
     } catch (error) {
         console.error("Reset error:", error);
         m.reply("❌ Reset කරන්න බැරි වුණා. නැවත උත්සාහ කරන්න.");
