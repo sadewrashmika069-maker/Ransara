@@ -8,7 +8,15 @@
             "PHOTO_DESC": "Converts non-animated sticker to image.",
             "PHOTO_ALERT": "_Reply to a non-animated sticker!_",
             "MP3_DESC": "Convert video/audio/video document to audio.",
-            "MP3_ALERT": "_Reply to a video/audio/video document message!_"
+            "MP3_ALERT": "_Reply to a video/audio/video document message!_",
+            "TRT_DESC": "Translate text to a given language",
+            "TRT_ALERT": "_Reply to any text with lang_\n_Eg : trt ml_",
+            "VV_DESC": "Resends the view Once message",
+            "VV_ALERT": "_Reply to ViewOnce Message !_",
+            "TTS_DESC": "Text to speech",
+            "SAY_DESC": "Text to speech with PTT",
+            "DOC_DESC": "Convert replied media to document",
+            "NONDOC_DESC": "Return document back to original media"
         },
         "download": {
             "DOWNLOADING": "_Downloading.._",
@@ -17,7 +25,9 @@
             "NEED_URL": "_Need a URL!_",
             "INVALID_URL": "_Invalid url!_",
             "NEED_Q": "_Need a Query_",
-            "ERROR": "_Error_"
+            "ERROR": "_Error_",
+            "AI_HI": "_Hi this is Sparky Your Ai. Assistant How can i help you?_",
+            "AI_SYS": "You are Sparky, a helpful WhatsApp AI assistant."
         },
         "app": {
             "RESTART_DESC": "Restarts the app.",
@@ -32,7 +42,24 @@
             "DELVAR_NOTFOUND": "_{} env var not found!_",
             "GETVAR_DESC": "Get environment variables.",
             "GETVAR_ALERT": "_Key needed!_\n_Eg: ${}getvar WORK_TYPE_",
-            "GETALLVARS": "Get all environment variables."
+            "GETALLVARS_DESC": "Get all environment variables.",
+            "MODE_DESC": "Change bot mode (public/private)",
+            "MODE_SUCCESS": "_Mode Successfully Changed To: {}_",
+            "MODE_MANAGER": "_*Mode manager*_\n_Current mode: {}_\n_Use .mode public/private_",
+            "SETTINGS_DESC": "Settings Configuration",
+            "SETSUDO": "Add a user to sudo list",
+            "UPDATE_DESC": "Update the bot to latest version",
+            "UP_TO_DATE": "```Bot is up-to-date!```",
+            "UPDATE_AVAILABLE": "*_New updates available!_*",
+            "BOT_UPDATED": "_*Bot updated!*_\n_Restarting..._",
+            "UPDATE_NOW": "_Use '{}update now' to update the bot._",
+            "NEED_REPLY": "*Need reply/mention/number*",
+            "ALREADY_SUDO": "_User is already a sudo_",
+            "NOT_SUDO": "_User is not a sudo_",
+            "NO_SUDO": "_No sudo users found_",
+            "SUDO_ADDED": "_Added @{} as sudo_",
+            "SUDO_REMOVED": "_Removed @{} from sudo_",
+            "SUDO_LIST": "*Current SUDO Users:*"
         },
         "group": {
             "ERROR_METADATA": "_Failed to fetch group metadata._",
@@ -89,6 +116,80 @@
             "GPP_NOTIMAGE": "_Please reply to an image!._",
             "GPP_SUCCESS": "_Group profile picture updated._",
             "GPP_FAILED": "_Failed to update group profile picture!._"
+        },
+        "whatsapp": {
+            "ONLINE_DESC": "Changes the user's online privacy settings.",
+            "LASTSEEN_DESC": "Changes the user's last seen privacy settings.",
+            "PROFILE_DESC": "Changes the user's profile picture privacy settings.",
+            "STATUS_DESC": "Changes the user's status privacy settings.",
+            "READRECEIPT_DESC": "Changes the user's read receipt privacy settings.",
+            "GROUPADD_DESC": "Changes the user's group addition privacy settings.",
+            "GETPRIVACY_DESC": "Fetches and displays the privacy settings.",
+            "DLT_DESC": "Deletes the replied message.",
+            "DLT_ALERT": "Reply to a message to delete it.",
+            "PRIVACY_SUCCESS": "_Privacy Updated to *{}*_"
+        },
+        "pdf": {
+            "PDF_DESC": "Converts stored images/text to PDF.",
+            "PDF_ALERT": "Error creating PDF 😅",
+            "ADDIMG_DESC": "Add image to PDF list.",
+            "ADDIMG_ALERT": "_Reply to an image_",
+            "ADDIMG_SUCCESS": "_🖼️ Image added_",
+            "ADDTEXT_DESC": "Add text to PDF list.",
+            "ADDTEXT_ALERT": "_Provide or reply to text_",
+            "ADDTEXT_SUCCESS": "_📝 Text added_",
+            "CLEAR_DESC": "Clear stored items.",
+            "CLEAR_SUCCESS": "_🗑️ Cleared stored items_"
+        },
+        "misc": {
+            "MENU_DESC": "List all available commands",
+            "COMMAND_NOT_FOUND": "_oops command not found_",
+            "REPLY_MEDIA": "_Reply to an image/video/audio!_",
+            "REPLY_TEXT": "_Reply to a text message!_",
+            "REPLY_STICKER": "_Reply to a sticker!_",
+            "REPLY_DOC": "_Reply to a document message!_",
+            "ERROR": "_An error occurred!_",
+            "NEED_QUERY": "_Please provide a query!_",
+            "NOT_FOUND": "_Not found!_",
+            "WAIT": "_Please wait..._",
+            "JID_DESC": "Gets the unique ID of a whatsapp chat or user.",
+            "RUNTIME_DESC": "Shows the bot's current runtime.",
+            "PING_DESC": "Checks if the bot is online and responsive.",
+            "WAME_DESC": "Converts a phone number into a whatsapp link.",
+            "PLAY_DESC": "Play a song from YouTube.",
+            "SONG_DESC": "Download a song from YouTube.",
+            "YTA_DESC": "Download audio from YouTube URL.",
+            "YTV_DESC": "Download video from YouTube URL.",
+            "YTS_DESC": "Search for videos on YouTube.",
+            "PAIR_DESC": "Generate a pairing code for linking devices.",
+            "REPO_DESC": "Show the bot's repository information.",
+            "SC_DESC": "Show the bot's source code information."
+        },
+        "sudo": {
+            "SETNAME_DESC": "Change the bot's profile name.",
+            "SETNAME_SUCCESS": "_Profile name updated_",
+            "SETBIO_DESC": "Change the bot's profile bio/status.",
+            "SETBIO_SUCCESS": "_Profile status updated_",
+            "BLOCK_DESC": "Block a user.",
+            "BLOCK_SUCCESS": "_User blocked_",
+            "UNBLOCK_DESC": "Unblock a user.",
+            "UNBLOCK_SUCCESS": "_User unblocked_",
+            "FULLPP_DESC": "Update profile picture in full quality.",
+            "FULLPP_SUCCESS": "_Profile Picture Updated_",
+            "PLUGIN_DESC": "Install external plugins.",
+            "REMOVE_DESC": "Remove external plugins.",
+            "PLUGINS_DESC": "Lists all installed external plugins."
+        },
+        "menu": {
+            "OWNER": "owner",
+            "MODE": "mode",
+            "PREFIX": "prefix",
+            "PLATFORM": "platform",
+            "DATE": "date",
+            "TIME": "time",
+            "UPTIME": "uptime",
+            "PLUGINS": "plugins",
+            "TITLE": "Hey {}!"
         }
     }
 }
