@@ -2,9 +2,8 @@
 const { Sparky, isPublic } = require("../lib");
 const os = require("os");
 const config = require("../config");
-const axios = require("axios");
 
-// Helper: runtime formatter (copy from your lib/functions if needed)
+// Runtime formatter
 function runtime(seconds) {
     seconds = Number(seconds);
     const days = Math.floor(seconds / (3600 * 24));
@@ -24,91 +23,43 @@ Sparky({
     alias: ["status", "online", "a"],
     category: "main",
     fromMe: isPublic,
-    desc: "Check bot is alive or not"
+    desc: "බොට් එක ජීවතුන් අතරදැයි පරීක්ෂා කරන්න"
 }, async ({ client, m, args }) => {
     try {
-        // Fake contact card for quoting
-        const number = "94704896880";
-        const jid = number + "@s.whatsapp.net";
-
-        let thumb = Buffer.from([]);
-        try {
-            const ppUrl = await client.profilePictureUrl(jid, "image");
-            const ppResp = await axios.get(ppUrl, { responseType: "arraybuffer" });
-            thumb = Buffer.from(ppResp.data, "binary");
-        } catch (err) {
-            console.log("❗ Couldn't fetch profile picture:", err.message);
-        }
-
-        const contactCard = {
-            key: {
-                fromMe: false,
-                participant: '0@s.whatsapp.net',
-                remoteJid: "status@broadcast"
-            },
-            message: {
-                contactMessage: {
-                    displayName: "SADEW-MINI ✨",
-                    vcard: `BEGIN:VCARD
-VERSION:3.0
-FN:SADEW-MINI ✨
-ORG:SADEW
-TEL;type=CELL;type=VOICE;waid=${number}:+94 70 489 6880
-END:VCARD`,
-                    jpegThumbnail: thumb
-                }
-            }
-        };
+        const botName = config.BOT_INFO?.split(";")[0] || "SADEW-MINI";
+        const ownerName = config.BOT_INFO?.split(";")[1] || "Sadew";
+        const prefix = m.prefix || ".";
 
         const status = `
 ╭───────────────◉
-│ *🤖 ${config.BOT_INFO?.split(";")[0] || "SADEW-MINI"} STATUS*
+│ *🤖 ${botName} STATUS*
 ├───────────────◉
 │✨ Bot is Active & Online!
-│🧠 Owner: ${config.BOT_INFO?.split(";")[1] || "Sadew"}
+│🧠 Owner: ${ownerName}
 │⚡ Version: ${config.VERSION || "1.0.0"}
-│📝 Prefix: [${m.prefix || "."}]
+│📝 Prefix: [${prefix}]
 │📳 Mode: [${config.WORK_TYPE || "public"}]
 │💾 RAM: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB / ${(os.totalmem() / 1024 / 1024).toFixed(2)}MB
 │🖥️ Host: ${os.hostname()}
 │⌛ Uptime: ${runtime(process.uptime())}
 ╰────────────────◉
-> SADEW-MINI WhatsApp Bot
+> ${botName} WhatsApp Bot
 
 *Reply with:*
 1️⃣ Ping
 2️⃣ Menu
 `;
 
-        // 1. Send video note (ptv)
-        await client.sendMessage(m.jid, {
-            video: { url: "https://files.catbox.moe/hlhmjs.mp4" },
-            mimetype: 'video/mp4',
-            ptv: true
-        }, { quoted: contactCard });
-
-        // 2. Send image with status caption
+        // Send image with caption (no video/audio)
         await client.sendMessage(m.jid, {
             image: { url: config.ALIVE_IMG || "https://i.imgur.com/Q2UNwXR.jpg" },
             caption: status,
             contextInfo: {
                 mentionedJid: [m.sender],
                 forwardingScore: 1000,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363397446799567@newsletter',
-                    newsletterName: 'SADEW-MINI 💫',
-                    serverMessageId: 143
-                }
+                isForwarded: true
             }
-        }, { quoted: contactCard });
-
-        // 3. Send audio
-        await client.sendMessage(m.jid, {
-            audio: { url: "https://files.catbox.moe/6figid.mp3" },
-            mimetype: 'audio/mpeg',
-            ptt: false
-        }, { quoted: contactCard });
+        }, { quoted: m });
 
         // Wait for user reply (1 or 2) for 30 seconds
         const filter = (msg) => {
@@ -141,13 +92,13 @@ END:VCARD`,
         if (replyText === "1") {
             await client.sendMessage(m.jid, { text: "🏓 Pong! Bot is alive." }, { quoted: m });
         } else if (replyText === "2") {
-            // Trigger the menu command manually
-            const fakeMsg = { ...replyMsg, message: { conversation: `${m.prefix}menu` } };
+            // Trigger the menu command
+            const fakeMsg = { ...replyMsg, message: { conversation: `${prefix}menu` } };
             client.ev.emit("messages.upsert", { messages: [fakeMsg], type: "notify" });
         }
 
     } catch (err) {
         console.error("❌ Alive cmd error:", err);
-        m.reply("❌ Error in alive command: " + err.message);
+        m.reply("❌ Alive command එකේ දෝෂයක්: " + err.message);
     }
 });
