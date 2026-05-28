@@ -12,7 +12,6 @@ Sparky({
     await m.react("⏳");
     await client.sendPresenceUpdate('composing', m.jid);
 
-    // 🔒 මෙතන දැන් ඩිරෙක්ට් කී එක නැහැ. උඹ GitHub Secrets දාපු එක පරිස්සමට ඔටෝ ගන්නවා
     const groqKey = process.env.GROQ_API_KEY;
 
     if (!groqKey) {
@@ -24,26 +23,26 @@ Sparky({
         console.log(`\n[AI LOG] ⚡ Triggering GROQ using GitHub Secrets Key...`);
         
         const response = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
-            model: "deepseek-r1-distill-llama-70b",
+            // ✨ Groq එකේ දැනට තියෙන සුපිරිම 70B මොඩල් එක මෙතනට දැම්මා
+            model: "llama-3.3-70b-versatile", 
             messages: [{ role: "user", content: args }]
         }, {
             headers: {
                 "Authorization": `Bearer ${groqKey}`,
                 "Content-Type": "application/json"
             },
-            timeout: 10000 // තත්පර 10ක් දෙනවා
+            timeout: 10000 
         });
 
         const groqReply = response.data?.choices?.[0]?.message?.content;
 
         if (groqReply) {
             await m.react("✅");
-            const cleanedReply = groqReply.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-            return m.reply(cleanedReply);
+            // Llama එකට <think> ටැග්ස් අවශ්‍ය නැති නිසා කෙලින්ම රිප්ලයි එක යවනවා
+            return m.reply(groqReply.trim());
         }
 
     } catch (error) {
-        // 🔍 සර්වර් එකෙන් රීඩ් කරද්දී එන ඇත්තම එරර් එක GitHub ලොග් එකට ගන්නවා
         console.log(`\n[🚨 GROQ ERROR DETAILS] Status: ${error.response?.status}`);
         console.log(`[🚨 GROQ ERROR BODY]:`, error.response?.data || error.message);
         
