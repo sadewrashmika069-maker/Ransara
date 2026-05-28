@@ -2,7 +2,6 @@
 const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
 
-// Helper to safely get the query string from args
 function getQuery(args) {
     if (!args) return "";
     if (Array.isArray(args)) return args.join(" ").trim();
@@ -20,73 +19,34 @@ Sparky({
 }, async ({ client, m, args }) => {
     try {
         let url = getQuery(args);
-        
         if (!url) {
-            return m.reply(`📸 *Website Screenshot*
-
-*Usage:* ${m.prefix}ss <website_url>
-*Example:* ${m.prefix}ss https://google.com
-
-*Supports:* HTTP, HTTPS websites
-`);
+            return m.reply(`📸 *Website Screenshot*\n\n*Usage:* ${m.prefix}ss <website_url>\n*Example:* ${m.prefix}ss https://google.com`);
         }
-        
-        // Add https:// if no protocol specified
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "https://" + url;
-        }
-        
-        // Validate URL format
-        const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-        if (!urlPattern.test(url)) {
-            return m.reply("❌ වලංගු URL එකක් නොවේ. කරුණාකර නිවැරදි වෙබ් ලිපිනයක් ඇතුළත් කරන්න.");
-        }
+        if (!url.startsWith("http")) url = "https://" + url;
         
         await m.react("⏳");
         await client.sendPresenceUpdate('composing', m.jid);
         
-        // Free screenshot API (no key required)
-        const screenshotUrl = `https://image.thum.io/get/width/1280/crop/800/${encodeURIComponent(url)}`;
+        // Using microlink.io – free, no API key required
+        const apiUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
+        const { data } = await axios.get(apiUrl, { timeout: 20000 });
         
-        // Try to fetch the screenshot to verify it works
-        const response = await axios.get(screenshotUrl, { 
-            responseType: 'arraybuffer',
-            timeout: 15000
-        });
-        
-        if (response.status !== 200) {
-            throw new Error("Failed to capture screenshot");
+        if (!data?.data?.screenshot?.url) {
+            throw new Error("No screenshot URL received");
         }
         
-        const caption = `📸 *Website Screenshot*
-
-🌐 URL: ${url}
-🤖 Bot: SADEW-MINI
-⏱️ Captured: ${new Date().toLocaleString("si-LK")}
-
-> 💫 Powered by thum.io API`;
-
+        const screenshotUrl = data.data.screenshot.url;
+        const caption = `📸 *Screenshot of:* ${url}\n🤖 SADEW-MINI\n⏱️ ${new Date().toLocaleString()}`;
+        
         await client.sendMessage(m.jid, {
-            image: Buffer.from(response.data),
+            image: { url: screenshotUrl },
             caption: caption
         }, { quoted: m });
         
         await m.react("✅");
-        
     } catch (error) {
         console.error("Screenshot error:", error);
         await m.react("❌");
-        
-        let errorMsg = "❌ *Screenshot Failed*\n\n";
-        
-        if (error.message.includes("timeout")) {
-            errorMsg += "Website is taking too long to respond. Please try again later.";
-        } else if (error.message.includes("Invalid URL")) {
-            errorMsg += "The URL format is invalid. Please check the website address.";
-        } else {
-            errorMsg += `Could not capture screenshot of the website.\n\n📝 Error: ${error.message.substring(0, 100)}`;
-        }
-        
-        await m.reply(errorMsg);
+        m.reply(`❌ *Screenshot failed*\n\n📝 ${error.message.substring(0, 100)}`);
     }
 });
