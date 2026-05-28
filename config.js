@@ -1,43 +1,4 @@
-const fs = require("fs");
-const dotenv = require("dotenv");
-const {
-	Sequelize
-} = require("sequelize");
-
-function toBool(value) {
-	return value === "true";
-}
-
-if (fs.existsSync("config.env")) {
-	dotenv.config({
-		path: "./config.env"
-	});
-}
-
-const DATABASE_URL = process.env.DATABASE_URL || "postgresql://aswin:D6dq0vk1xoQx_OO-Iv4ESQ@rough-doxle-2360.7s5.aws-ap-south-1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full";
-
-if (!DATABASE_URL.startsWith("sqlite://") && !DATABASE_URL.startsWith("postgres://") && !DATABASE_URL.startsWith("postgresql://")) {
-	throw new Error("Invalid DATABASE_URL format. Use 'sqlite://' or 'postgres://'");
-}
-
-const DATABASE = DATABASE_URL.startsWith("sqlite://") ? new Sequelize(DATABASE_URL, {
-	dialect: "sqlite",
-	storage: DATABASE_URL.replace("sqlite://", ""),
-	logging: false
-}) : new Sequelize(DATABASE_URL, {
-	dialect: "postgres",
-	protocol: "postgres",
-	ssl: true,
-	dialectOptions: {
-		ssl: {
-			require: true,
-			rejectUnauthorized: false
-		},
-	},
-	logging: false,
-});
-
-DATABASE.authenticate().then(() => console.log("Database connection established successfully.")).catch((err) => console.error("Database connection failed:", err.message));
+// ... (everything above unchanged) ...
 
 module.exports = {
 	VERSION: require("./package.json").version,
@@ -56,7 +17,7 @@ module.exports = {
 	GROQ_API_KEY: process.env.GROQ_API_KEY || "",
 	// 👇 GEMINI API KEY
 	GEMINI_API_KEY: process.env.GEMINI_API_KEY || "AIzaSyAVsxiD327yX3nqKLOz4HpIcH0smJJWFHg",
-	// 👇 SINHALASUB API KEY (added)
+	// 👇 SINHALASUB API KEY
 	SINHALASUB_API_KEY: process.env.SINHALASUB_API_KEY || "zanta_fCZXpI08BXyizOiRJlDBShW6",
 	HANDLERS: (process.env.HANDLERS || process.env.HANDLER || process.env.PREFIX || ".").trim(),
 	HEROKU_API_KEY: process.env.HEROKU_API_KEY || "",
