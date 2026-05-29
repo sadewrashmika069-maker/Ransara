@@ -5,7 +5,7 @@ Sparky({
     name: "ai",
     alias: ["ask", "groq"],
     category: "ai",
-    desc: "Chat with Ultra-Fast Dedicated GROQ AI Engine"
+    desc: "Chat with Ultra-Fast Dedicated GROQ AI Engine (Sinhala Mode)"
 }, async ({ client, m, args }) => {
     if (!args) return m.reply("_මචං අහන්න ඕන ප්‍රශ්නයක් දාපන්! Example: .ai Who is Tony Stark?_");
 
@@ -23,9 +23,18 @@ Sparky({
         console.log(`\n[AI LOG] ⚡ Triggering GROQ using GitHub Secrets Key...`);
         
         const response = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
-            // ✨ Groq එකේ දැනට තියෙන සුපිරිම 70B මොඩල් එක මෙතනට දැම්මා
             model: "llama-3.3-70b-versatile", 
-            messages: [{ role: "user", content: args }]
+            // ✨ මෙතනට System Message එකක් දාලා AI එකට සිංහලෙන් විතරක් කතා කරන්න අණ කරලා තියෙන්නේ
+            messages: [
+                { 
+                    role: "system", 
+                    content: "You are a helpful AI assistant. You must always reply in clear, natural Sinhala language, no matter what language the user asks the question in." 
+                },
+                { 
+                    role: "user", 
+                    content: args 
+                }
+            ]
         }, {
             headers: {
                 "Authorization": `Bearer ${groqKey}`,
@@ -38,7 +47,6 @@ Sparky({
 
         if (groqReply) {
             await m.react("✅");
-            // Llama එකට <think> ටැග්ස් අවශ්‍ය නැති නිසා කෙලින්ම රිප්ලයි එක යවනවා
             return m.reply(groqReply.trim());
         }
 
@@ -53,7 +61,9 @@ Sparky({
 async function tryBackup(args, m) {
     try {
         const token = process.env.DEEPSEEK_TOKEN || "VK4fry";
-        const urlBackup = `https://whiteshadow-x-api.vercel.app/api/ai/deepseekv4?q=${encodeURIComponent(args)}&apitoken=${token}`;
+        // ✨ බැකප් එකටත් ප්‍රශ්නය අන්තිමට (Reply in Sinhala) කෑල්ල එකතු කරලා යවනවා
+        const sinhalaQuery = args + " (Reply in Sinhala language)";
+        const urlBackup = `https://whiteshadow-x-api.vercel.app/api/ai/deepseekv4?q=${encodeURIComponent(sinhalaQuery)}&apitoken=${token}`;
         const resBackup = await axios.get(urlBackup, { timeout: 7000 });
         
         if (resBackup.data && resBackup.data.success && resBackup.data.response) {
