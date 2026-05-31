@@ -1,382 +1,233 @@
-const { Sparky, commands, isPublic } = require("../lib");
+const {
+    Sparky,
+    commands,
+    isPublic
+} = require("../lib");
 const config = require("../config.js");
 
-const MENU_REPLY_TIMEOUT = 5 * 60 * 1000;
+// Global set to track main menu message IDs
+if (!global.menuMsgIds) global.menuMsgIds = new Set();
 
-if (!global.menuReplyStore) global.menuReplyStore = new Map();
-if (!global.menuReplyListenerClients) global.menuReplyListenerClients = new WeakSet();
-
-const categoriesList = [
-    {
-        num: 1,
-        name: "DOWNLOAD",
-        icon: "📥",
-        title: "DOWNLOAD MENU",
-        subtitle: "YT, FB, IG වීඩියෝ",
-        categoryAliases: ["download", "downloader", "media", "video", "audio", "song"],
-        keywords: ["download", "down", "yt", "youtube", "facebook", "fb", "instagram", "ig", "video", "audio", "song", "music", "tiktok", "mediafire"]
-    },
-    {
-        num: 2,
-        name: "AI",
-        icon: "🧠",
-        title: "AI MENU",
-        subtitle: "ChatGPT, Gemini, Bot",
-        categoryAliases: ["ai", "chatbot", "gpt", "openai"],
-        keywords: ["ai", "ask", "chatgpt", "gpt", "gemini", "bard", "bot", "deepseek", "groq", "llama"]
-    },
-    {
-        num: 3,
-        name: "GROUP",
-        icon: "👥",
-        title: "GROUP MENU",
-        subtitle: "Group එක manage කරන්න",
-        categoryAliases: ["group", "gc"],
-        keywords: ["group", "gc", "tag", "mention", "invite", "link", "welcome", "goodbye", "kick", "promote", "demote"]
-    },
-    {
-        num: 4,
-        name: "ADMIN",
-        icon: "⚙️",
-        title: "ADMIN MENU",
-        subtitle: "Admin වැඩ කටයුතු",
-        categoryAliases: ["admin", "moderation"],
-        keywords: ["admin", "promote", "demote", "kick", "remove", "add", "mute", "unmute", "warn", "ban"]
-    },
-    {
-        num: 5,
-        name: "TOOLS",
-        icon: "🔧",
-        title: "TOOLS MENU",
-        subtitle: "Sticker, QR, Converter",
-        categoryAliases: ["tools", "tool", "utility", "converter"],
-        keywords: ["tool", "qr", "scan", "short", "url", "convert", "sticker", "photo", "image", "edit", "s"]
-    },
-    {
-        num: 6,
-        name: "OWNER",
-        icon: "👑",
-        title: "OWNER MENU",
-        subtitle: "Bot පාලනය සඳහා",
-        categoryAliases: ["owner", "sudo", "system"],
-        keywords: ["owner", "restart", "shutdown", "update", "block", "unblock", "broadcast", "jid", "eval"]
-    },
-    {
-        num: 7,
-        name: "OTHER",
-        icon: "📁",
-        title: "OTHER MENU",
-        subtitle: "වෙනත් විධාන",
-        categoryAliases: ["other", "misc", "main", "general"],
-        keywords: ["fun", "game", "meme", "quote", "weather", "news", "search", "info", "alive", "ping", "menu"]
-    }
-];
-
-function getTextFromMessage(msg) {
-    const message = msg?.message || {};
-
-    return (
-        message.conversation ||
-        message.extendedTextMessage?.text ||
-        message.imageMessage?.caption ||
-        message.videoMessage?.caption ||
-        message.documentMessage?.caption ||
-        ""
-    ).trim();
-}
-
-function getQuotedMessageId(msg) {
-    const message = msg?.message || {};
-    const contextInfo =
-        message.extendedTextMessage?.contextInfo ||
-        message.imageMessage?.contextInfo ||
-        message.videoMessage?.contextInfo ||
-        message.documentMessage?.contextInfo ||
-        message.audioMessage?.contextInfo ||
-        message.stickerMessage?.contextInfo;
-
-    return contextInfo?.stanzaId || null;
-}
-
-function getCommandName(cmd) {
-    if (!cmd) return "";
-
-    const possibleNames = [
-        cmd.name,
-        cmd.pattern,
-        cmd.command,
-        cmd.cmd
+// Helper function to show category submenu (reused in both .menu number and reply handler)
+async function showCategoryMenu(client, m, categoryNumber, prefix) {
+    const categoriesList = [
+        { num: 1, name: "DOWNLOAD", icon: "📥", keywords: ["download", "yt", "youtube", "facebook", "fb", "instagram", "ig", "media", "video", "audio", "song", "music"] },
+        { num: 2, name: "AI", icon: "🧠", keywords: ["ai", "chatgpt", "gpt", "gemini", "bard", "chatbot", "ai chat"] },
+        { num: 3, name: "GROUP", icon: "👥", keywords: ["group", "gc", "gcast", "groupcast", "tag", "mention", "invite", "link", "group info"] },
+        { num: 4, name: "ADMIN", icon: "⚙️", keywords: ["admin", "promote", "demote", "kick", "remove", "add", "mute", "unmute", "warning", "warn"] },
+        { num: 5, name: "TOOLS", icon: "🔧", keywords: ["tool", "qr", "scanner", "shortener", "url", "converter", "sticker", "photo", "image", "edit"] },
+        { num: 6, name: "OWNER", icon: "👑", keywords: ["owner", "bot", "restart", "shutdown", "update", "block", "unblock", "broadcast"] },
+        { num: 7, name: "OTHER", icon: "📁", keywords: ["fun", "game", "meme", "quote", "weather", "news", "search", "info"] }
     ];
-
-    for (const item of possibleNames) {
-        if (!item) continue;
-
-        if (typeof item === "string") {
-            return item.replace(/^[./!#]/, "").trim();
-        }
-
-        if (item instanceof RegExp || item.source) {
-            const source = item.source || "";
-            const matches = source.match(/[a-zA-Z0-9]+/g);
-
-            if (matches && matches.length > 0) {
-                return matches[matches.length - 1];
-            }
-        }
-    }
-
-    return "";
-}
-
-function getArgsText(args, m) {
-    if (Array.isArray(args)) {
-        return args.join(" ").trim();
-    }
-
-    if (typeof args === "string") {
-        return args.trim();
-    }
-
-    if (args && typeof args === "object") {
-        return Object.values(args).join(" ").trim();
-    }
-
-    const text = m?.text || m?.body || "";
-    return text.replace(/^[./!#]menu/i, "").trim();
-}
-
-function commandBelongsToCategory(cmd, selectedCat) {
-    const cmdName = getCommandName(cmd).toLowerCase();
-    const cmdCategory = String(cmd.category || "other").toLowerCase();
-    const cmdDesc = String(cmd.desc || "").toLowerCase();
-
-    if (selectedCat.categoryAliases.some((cat) => cmdCategory.includes(cat))) {
-        return true;
-    }
-
-    return selectedCat.keywords.some((kw) => {
-        return cmdName === kw || cmdName.includes(kw) || cmdDesc.includes(kw);
-    });
-}
-
-function getCommandsForCategory(selectedCat) {
-    const catCommands = [];
-
-    if (!Array.isArray(commands)) return catCommands;
-
-    commands.forEach((cmd) => {
-        if (!cmd || cmd.dontAddCommandList) return;
-
-        const cmdName = getCommandName(cmd);
-        if (!cmdName) return;
-
-        if (commandBelongsToCategory(cmd, selectedCat)) {
-            if (!catCommands.includes(cmdName)) {
-                catCommands.push(cmdName);
-            }
-        }
-    });
-
-    return catCommands.sort();
-}
-
-async function showCategoryMenu(client, m, categoryNumber, prefix, quotedMsg = null) {
-    const selectedCat = categoriesList.find((cat) => cat.num === categoryNumber);
+    let selectedCat = categoriesList.find(cat => cat.num === categoryNumber);
     if (!selectedCat) return false;
 
-    const catCommands = getCommandsForCategory(selectedCat);
+    let catCommands = [];
+    if (commands && Array.isArray(commands)) {
+        commands.forEach(cmd => {
+            if (cmd.dontAddCommandList) return;
+            let cmdName = cmd.name;
+            let cmdNameStr = "";
+            if (typeof cmdName === 'object' && cmdName && cmdName.source) {
+                let match = cmdName.source.split('\\s*')[1]?.toString().match(/([a-z0-9]+)/i);
+                cmdNameStr = match ? match[1] : "";
+            } else if (typeof cmdName === 'string') {
+                cmdNameStr = cmdName;
+            } else if (cmdName && typeof cmdName === 'object') {
+                cmdNameStr = Object.values(cmdName)[0] || "";
+            }
+            let cmdCategory = (cmd.category || "other").toLowerCase();
+            let cmdDesc = (cmd.desc || "").toLowerCase();
+            let isInCategory = false;
+            if (cmdCategory === selectedCat.name.toLowerCase()) {
+                isInCategory = true;
+            } else {
+                for (let kw of selectedCat.keywords) {
+                    if (cmdDesc.includes(kw) || cmdNameStr.includes(kw)) {
+                        isInCategory = true;
+                        break;
+                    }
+                }
+            }
+            if (isInCategory && cmdNameStr && cmdNameStr !== "unknown" && cmdNameStr !== "") {
+                if (!catCommands.includes(cmdNameStr)) catCommands.push(cmdNameStr);
+            }
+        });
+    }
 
     let categoryMenu = `
 ╔════════════════════════════╗
-║     ${selectedCat.icon} ${selectedCat.title}
-║     Commands: ${catCommands.length}
+║     ${selectedCat.icon} ${selectedCat.name} MENU     
+║        commands : ${catCommands.length}        
 ╚════════════════════════════╝
 
 ┌────────────────────────────┐
 `;
-
     if (catCommands.length > 0) {
-        catCommands.forEach((cmd, index) => {
-            const num = String(index + 1).padStart(2, "0");
-            categoryMenu += `│ ${num}. ${prefix}${cmd}\n`;
+        catCommands.sort().forEach((cmd, idx) => {
+            let num = (idx + 1).toString().padStart(2);
+            categoryMenu += `│ ${num}. ${cmd}\n`;
         });
     } else {
-        categoryMenu += "│ 📭 මේ category එකට commands හමු වුණේ නෑ\n";
+        categoryMenu += `│    📭 කිසිදු command එකක් නැත\n`;
     }
+    categoryMenu += `
+└────────────────────────────┘
 
-    categoryMenu += `└────────────────────────────┘
+💡 *භාවිතය*
+┣ ➤ ${prefix}menu [number] - category එක බලන්න
+┣ ➤ ${prefix}menu - ප්‍රධාන මෙනුවට
+┗ ➤ ${prefix}help - උදව් සඳහා
 
-💡 භාවිතය
-➤ Command එක run කරන්න: ${prefix}command
-➤ Main menu එකට යන්න: ${prefix}menu
-
-⚡ ${selectedCat.name} SECTION ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ⚡ ${selectedCat.name} SECTION ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
-
-    await client.sendMessage(m.jid, { text: categoryMenu }, { quoted: quotedMsg || m });
+    await client.sendMessage(m.jid, { text: categoryMenu }, { quoted: m });
     return true;
 }
 
-function setupMenuReplyListener(client) {
-    if (!client?.ev) return;
-    if (global.menuReplyListenerClients.has(client)) return;
-
-    global.menuReplyListenerClients.add(client);
-
-    client.ev.on("messages.upsert", async (chatUpdate) => {
-        try {
-            const messages = chatUpdate.messages || [];
-
-            for (const msg of messages) {
-                if (!msg?.message) continue;
-
-                const text = getTextFromMessage(msg);
-                if (!/^[1-7]$/.test(text)) continue;
-
-                const quotedId = getQuotedMessageId(msg);
-                if (!quotedId) continue;
-
-                const menuData = global.menuReplyStore.get(quotedId);
-                if (!menuData) continue;
-
-                if (Date.now() > menuData.expiresAt) {
-                    global.menuReplyStore.delete(quotedId);
-                    continue;
-                }
-
-                if (menuData.jid !== msg.key.remoteJid) continue;
-
-                const fakeM = {
-                    ...msg,
-                    jid: msg.key.remoteJid,
-                    sender: msg.key.participant || msg.key.remoteJid,
-                    prefix: menuData.prefix,
-                    reply: (replyText) => {
-                        return client.sendMessage(msg.key.remoteJid, { text: replyText }, { quoted: msg });
-                    }
-                };
-
-                await showCategoryMenu(client, fakeM, Number(text), menuData.prefix, msg);
-            }
-        } catch (err) {
-            console.log("Menu reply listener error:", err);
-        }
-    });
-}
-
+// Main menu command
 Sparky({
     name: "menu",
     category: "misc",
     fromMe: isPublic,
-    desc: "සියලුම විධාන බලන්න"
+    desc: "📋 සියලුම විධාන බලන්න - අංකයක් එවන්න"
 }, async ({ client, m, args }) => {
     try {
-        setupMenuReplyListener(client);
-
-        const prefix = m.prefix || ".";
-        const userInput = getArgsText(args, m);
-
-        if (/^[1-7]$/.test(userInput)) {
-            await showCategoryMenu(client, m, Number(userInput), prefix);
+        // Handle number input (with prefix) like .menu 1
+        let userInput = "";
+        if (args && Array.isArray(args)) {
+            userInput = args.join(" ").trim();
+        } else if (args && typeof args === 'string') {
+            userInput = args.trim();
+        } else if (args && typeof args === 'object') {
+            userInput = Object.values(args).join(" ").trim();
+        } else {
+            userInput = "";
+        }
+        
+        if (userInput && /^[0-9]+$/.test(userInput)) {
+            let selectedNum = parseInt(userInput);
+            await showCategoryMenu(client, m, selectedNum, m.prefix || ".");
             return;
         }
+        
+        // Show main menu with image
+        let uptime = await m.uptime();
+        let now = new Date();
+        let date = now.toLocaleDateString("en-IN", { timeZone: "Asia/Colombo" });
+        let time = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Colombo" });
+        
+        let botName = config.BOT_INFO ? config.BOT_INFO.split(";")[0] : "SADEW MINI";
+        
+        let mainMenu = `
+╔══════════════════════════════════╗
+║        🤖 ${botName}                ║
+║      ✨ MAIN MENU ✨               ║
+╚══════════════════════════════════╝
 
-        const uptime = typeof m.uptime === "function" ? await m.uptime() : "Unknown";
-        const now = new Date();
-        const date = now.toLocaleDateString("en-IN", { timeZone: "Asia/Colombo" });
-        const time = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Colombo" });
-        const botName = config.BOT_INFO ? config.BOT_INFO.split(";")[0] : "SADEW MINI";
-        const totalCommands = Array.isArray(commands) ? commands.length : 0;
-
-        const mainMenu = `
-╔══════════════════════════════╗
-║          🤖 ${botName}
-║          ✨ MAIN MENU ✨
-╚══════════════════════════════╝
-
-┌──────────────────────────────┐
-│          👤 USER INFO
-├──────────────────────────────┤
-│ 🏷️ නම      : ${m.pushName || "Guest"}
-│ 🔖 මාදිලිය : ${config.WORK_TYPE || "Public"}
+┌──────────────────────────────────┐
+│         👤 USER INFO              │
+├──────────────────────────────────┤
+│ 🏷 නම     : ${m.pushName || "Guest"}
+│ 🔖 මාදිලිය  : ${config.WORK_TYPE || "Public"}
 │ 📅 දිනය    : ${date}
-│ ⏰ වේලාව   : ${time}
-│ ⚡ Uptime  : ${uptime}
-│ 📦 Plugins : ${totalCommands}
-│ 🔰 Prefix  : ${prefix}
-└──────────────────────────────┘
+│ ⏰ වේලාව    : ${time}
+│ ⚡ වැඩ කල කාලය : ${uptime}
+│ 📦 ප්ලගින් : ${commands ? (Array.isArray(commands) ? commands.length : 0) : 0}
+│ 🔰 පෙරවරු : ${m.prefix || "."}
+└──────────────────────────────────┘
 
-┌──────────────────────────────┐
-│          📚 CATEGORIES
-├──────────────────────────────┤
+┌──────────────────────────────────┐
+│        📚 CATEGORIES             │
+├──────────────────────────────────┤
+│                                  
+│  1. 📥 DOWNLOAD MENU              
+│     YT, FB, IG වීඩියෝ           
 │
-│  1. 📥 DOWNLOAD MENU
-│     YT, FB, IG වීඩියෝ
+│  2. 🧠 AI MENU                    
+│     ChatGPT, Gemini, Bot          
 │
-│  2. 🧠 AI MENU
-│     ChatGPT, Gemini, Bot
+│  3. 👥 GROUP MENU                 
+│     Group එක manage කරන්න         
 │
-│  3. 👥 GROUP MENU
-│     Group එක manage කරන්න
+│  4. ⚙️ ADMIN MENU                 
+│     Admin වැඩ කටයුතු             
 │
-│  4. ⚙️ ADMIN MENU
-│     Admin වැඩ කටයුතු
+│  5. 🔧 TOOLS MENU                 
+│     Sticker, QR, Converter        
 │
-│  5. 🔧 TOOLS MENU
-│     Sticker, QR, Converter
+│  6. 👑 OWNER MENU                 
+│     Bot පාලනය සඳහා              
 │
-│  6. 👑 OWNER MENU
-│     Bot පාලනය සඳහා
+│  7. 📁 OTHER MENU                 
+│     වෙනත් විධාන                  
 │
-│  7. 📁 OTHER MENU
-│     වෙනත් විධාන
-│
-└──────────────────────────────┘
+└──────────────────────────────────┘
 
-┌──────────────────────────────┐
-│          💡 HOW TO USE
-├──────────────────────────────┤
-│ මේ message එකට reply කරලා
-│ number එක විතරක් එවන්න.
+┌──────────────────────────────────┐
+│         💡 HOW TO USE             │
+├──────────────────────────────────┤
+│                                  
+│  📌 *අංකයක් එවන්න* :               
+│                                  
+│     • ${m.prefix || "."}menu 1  → DOWNLOAD
+│     • ${m.prefix || "."}menu 2  → AI
+│     • ${m.prefix || "."}menu 3  → GROUP
+│     • ${m.prefix || "."}menu 4  → ADMIN
+│     • ${m.prefix || "."}menu 5  → TOOLS
+│     • ${m.prefix || "."}menu 6  → OWNER
+│     • ${m.prefix || "."}menu 7  → OTHER
 │
-│ Reply: 1  → DOWNLOAD MENU
-│ Reply: 2  → AI MENU
-│ Reply: 3  → GROUP MENU
-│ Reply: 4  → ADMIN MENU
-│ Reply: 5  → TOOLS MENU
-│ Reply: 6  → OWNER MENU
-│ Reply: 7  → OTHER MENU
+│  🆕 *නැත්නම්:* මෙම පණිවිඩයට *Reply* කර අංකය පමණක් එවන්න.
+│     (උදා: Reply with "1" → DOWNLOAD menu)
 │
-│ නැත්නම්:
-│ ${prefix}menu 1
-│ ${prefix}menu 2
-└──────────────────────────────┘
+└──────────────────────────────────┘
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
      💫 POWERED BY ${botName} 💫
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
         const menuImageUrl = config.MENU_IMAGE_URL || "https://res.cloudinary.com/dqlh378fb/image/upload/v1779928206/zanta_media_uploads/n6pgdmmiivooq8ylvrao.jpg";
-
+        
         const sentMsg = await client.sendMessage(m.jid, {
             image: { url: menuImageUrl },
             caption: mainMenu
         }, { quoted: m });
-
-        const sentId = sentMsg?.key?.id;
-
-        if (sentId) {
-            global.menuReplyStore.set(sentId, {
-                jid: m.jid,
-                prefix,
-                expiresAt: Date.now() + MENU_REPLY_TIMEOUT
-            });
-
-            setTimeout(() => {
-                global.menuReplyStore.delete(sentId);
-            }, MENU_REPLY_TIMEOUT);
-        }
+        
+        // Store the message ID so that replies can be recognized
+        global.menuMsgIds.add(sentMsg.key.id);
+        // Auto-remove after 5 minutes to avoid memory leak
+        setTimeout(() => global.menuMsgIds.delete(sentMsg.key.id), 5 * 60 * 1000);
+        
     } catch (e) {
         console.log("Menu error:", e);
-        await m.reply(`❌ සමාවන්න, menu එක පෙන්වන්න බැරි වුණා.\n\nError: ${e.message}`);
+        console.log("Error stack:", e.stack);
+        m.reply(`❌ සමාවන්න, මෙනුව පෙන්වන්න බැරි වුණා.\n\n📝 *Error:* ${e.message}\n\n💡 උපදෙස්: ${m.prefix || "."}help`);
     }
+});
+
+// Command to capture replies with just a number (no prefix) to the main menu
+Sparky({
+    name: "menureply",
+    pattern: /^\d+$/,
+    dontPrefix: true,   // allows raw number without dot
+    fromMe: false,
+    dontAddCommandList: true,
+    desc: "Internal handler for menu number replies"
+}, async ({ client, m, args }) => {
+    // Must be a reply to a message
+    if (!m.quoted) return;
+    const quotedId = m.quoted.key.id;
+    // Check if the quoted message is a main menu message we stored
+    if (!global.menuMsgIds || !global.menuMsgIds.has(quotedId)) return;
+    
+    const number = parseInt(args[0]);
+    if (isNaN(number) || number < 1 || number > 7) return;
+    
+    // Show the category submenu
+    const prefix = m.prefix || ".";
+    await showCategoryMenu(client, m, number, prefix);
 });
