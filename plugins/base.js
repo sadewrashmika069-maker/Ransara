@@ -3,6 +3,14 @@ const fs = require("fs");
 const { exec } = require("child_process");
 const path = require("path");
 
+// 🛠️ සර්වර් එකේ ffmpeg නැති නිසා ffmpeg-static පැකේජ් එක තියෙනවද කියලා ඔටෝ චෙක් කරනවා
+let ffmpegPath = "ffmpeg";
+try {
+    ffmpegPath = require("ffmpeg-static");
+} catch (e) {
+    // ffmpeg-static නැත්නම් global command එකම තියාගන්නවා
+}
+
 Sparky({
     name: "bass",
     category: "misc",
@@ -28,8 +36,8 @@ Sparky({
 
         fs.writeFileSync(tempIn, media);
 
-        // FFmpeg Bass Boost Command
-        const ffmpegCmd = `ffmpeg -i "${tempIn}" -af "bass=g=15,volume=1.2" "${tempOut}" -y`;
+        // ⚡ ffmpegPath එක ඩයිනමික් කරා (Static එක තිබ්බොත් ඒකෙන් රන් වෙන්නේ)
+        const ffmpegCmd = `"${ffmpegPath}" -i "${tempIn}" -af "bass=g=15,volume=1.2" "${tempOut}" -y`;
 
         exec(ffmpegCmd, async (err, stdout, stderr) => {
             if (fs.existsSync(tempIn)) fs.unlinkSync(tempIn);
@@ -37,8 +45,15 @@ Sparky({
             if (err) {
                 console.error("FFmpeg Raw Error:", err);
                 await m.react("❌");
-                // 🛠️ ඇත්තම එරර් එක වට්ස්ඇප් එකටම එවන්න හැදුවා මචං
-                return await m.reply(`_❌ FFmpeg System Error:_\n\`\`\`${err.message}\`\`\``);
+                
+                // 📝 ඔයා ඉල්ලපු විදිහටම එරර් එක ලස්සනට වට්ස්ඇප් එකට එන්න හැදුවා
+                let errorMsg = `_❌ FFmpeg System Error:_\n\`\`\`${err.message}\`\`\`\n\n`;
+                
+                if (err.message.includes("not found")) {
+                    errorMsg += `*💡 පියවර:* ඔයාගේ සර්වර් එකේ FFmpeg නැහැ මචං. මේක ගොඩදාගන්න බොට්ගේ ටර්මිනල් එකේ \`npm i ffmpeg-static\` කියලා ටයිප් කරලා එන්ටර් කරලා බොට්ව Restart කරන්න!`;
+                }
+                
+                return await m.reply(errorMsg);
             }
 
             const audioBuffer = fs.readFileSync(tempOut);
@@ -51,6 +66,6 @@ Sparky({
     } catch (error) {
         console.error(error);
         await m.react("❌");
-        m.reply(error.message || error);
+        m.reply(`_❌ Unexpected Error:_\n\`\`\`${error.message || error}\`\`\``);
     }
 });
