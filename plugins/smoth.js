@@ -1,58 +1,40 @@
-const { Sparky } = require("../lib");
-const ffmpegPath = require("ffmpeg-static");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const { execFile } = require("child_process");
-const { promisify } = require("util");
-const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
+const { Sparky, isPublic } = require("../lib");
+const { spawn } = require("child_process");
 
-const execFileAsync = promisify(execFile);
+let ffmpegBin = "ffmpeg";
 
-async function streamToBuffer(stream) {
-    const chunks = [];
+try {
+    const ffmpegStatic = require("ffmpeg-static");
+    if (ffmpegStatic) ffmpegBin = ffmpegStatic;
+} catch {
+    ffmpegBin = "ffmpeg";
+}
 
-    for await (const chunk of stream) {
-        chunks.push(chunk);
-    }
+function isVideoQuoted(m) {
+    const quotedMessage = m.quoted?.message || {};
+    const directMessage = m.message || {};
 
-    return Buffer.concat(chunks);
+    return Boolean(
+        quotedMessage.videoMessage ||
+        directMessage.videoMessage ||
+        m.quoted?.mtype?.includes?.("videoMessage")
+    );
 }
 
 async function downloadVideo(m) {
-    if (m.quoted?.download) {
+    if (m.quoted && typeof m.quoted.download === "function") {
         return await m.quoted.download();
     }
 
-    if (m.download) {
-        return await m.download();
-    }
-
-    const quoted = m.quoted?.message || m.quoted;
-    const videoMessage =
-        quoted?.videoMessage ||
-        m.message?.videoMessage ||
-        m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.videoMessage;
-
-    if (!videoMessage) {
-        throw new Error("Video message එකක් හමු වුණේ නෑ");
-    }
-
-    const stream = await downloadContentFromMessage(videoMessage, "video");
-    return await streamToBuffer(stream);
+    throw new Error("Video එක download කරන්න බැරි වුණා. Video එකකට reply කරලා try කරන්න.");
 }
 
-async function convertTo60Fps(inputBuffer) {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "smooth-"));
-    const inputPath = path.join(tempDir, "input.mp4");
-    const outputPath = path.join(tempDir, "output.mp4");
-
-    try {
-        fs.writeFileSync(inputPath, inputBuffer);
-
+function convertTo60Fps(inputBuffer) {
+    return new Promise((resolve, reject) => {
         const args = [
-            "-y",
-            "-i", inputPath,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-i", "pipe:0",
             "-vf", "minterpolate=fps=60:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1",
             "-c:v", "libx264",
             "-preset", "veryfast",
@@ -60,43 +42,74 @@ async function convertTo60Fps(inputBuffer) {
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "128k",
-            "-movflags", "+faststart",
-            outputPath
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-f", "mp4",
+            "pipe:1"
         ];
 
-        await execFileAsync(ffmpegPath, args, {
-            timeout: 10 * 60 * 1000,
-            maxBuffer: 1024 * 1024 * 20
+        const ffmpeg = spawn(ffmpegBin, args, {
+            stdio: ["pipe", "pipe", "pipe"]
         });
 
-        return fs.readFileSync(outputPath);
-    } finally {
-        try {
-            fs.rmSync(tempDir, { recursive: true, force: true });
-        } catch {}
-    }
+        const outputChunks = [];
+        const errorChunks = [];
+
+        const timeout = setTimeout(() => {
+            ffmpeg.kill("SIGKILL");
+            reject(new Error("Video convert timeout වුණා. කෙටි video එකක් try කරන්න."));
+        }, 10 * 60 * 1000);
+
+        ffmpeg.stdout.on("data", (chunk) => outputChunks.push(chunk));
+        ffmpeg.stderr.on("data", (chunk) => errorChunks.push(chunk));
+
+        ffmpeg.on("error", (err) => {
+            clearTimeout(timeout);
+
+            if (err.code === "ENOENT") {
+                reject(new Error("FFmpeg install කරලා නෑ. GitHub Actions workflow එකට FFmpeg install step එක add කරන්න."));
+            } else {
+                reject(err);
+            }
+        });
+
+        ffmpeg.on("close", (code) => {
+            clearTimeout(timeout);
+
+            if (code === 0) {
+                const outputBuffer = Buffer.concat(outputChunks);
+
+                if (!outputBuffer || outputBuffer.length < 1000) {
+                    reject(new Error("Output video එක empty වුණා."));
+                    return;
+                }
+
+                resolve(outputBuffer);
+                return;
+            }
+
+            const errorText = Buffer.concat(errorChunks).toString("utf8");
+            reject(new Error(errorText || `FFmpeg failed with code ${code}`));
+        });
+
+        ffmpeg.stdin.end(inputBuffer);
+    });
 }
 
 Sparky({
     name: "smooth",
-    alias: ["60fps", "fps60", "smoothvideo"],
+    alias: ["smoth", "60fps", "fps60", "smoothvideo"],
     category: "tools",
-    fromMe: false,
-    desc: "සාමාන්‍ය වීඩියෝ එකක් 60fps smooth video එකක් බවට convert කරන්න"
+    fromMe: isPublic,
+    desc: "සාමාන්‍ය video එකක් 60fps smooth video එකක් බවට convert කරන්න"
 }, async ({ client, m }) => {
     try {
-        const quotedVideo =
-            m.quoted?.videoMessage ||
-            m.quoted?.message?.videoMessage ||
-            m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.videoMessage;
-
-        if (!quotedVideo && !m.message?.videoMessage) {
+        if (!isVideoQuoted(m)) {
             return await m.reply(
                 "🎬 Video එකකට reply කරලා command එක දෙන්න මචං.\n\nඋදා:\n.smooth"
             );
         }
 
-        await m.react?.("🎬");
+        await m.react("🎬");
 
         const videoBuffer = await downloadVideo(m);
 
@@ -104,8 +117,8 @@ Sparky({
             return await m.reply("❌ Video එක download කරන්න බැරි වුණා.");
         }
 
-        if (videoBuffer.length > 80 * 1024 * 1024) {
-            return await m.reply("❌ Video එක ලොකු වැඩියි මචං. 80MB ට අඩු video එකක් try කරන්න.");
+        if (videoBuffer.length > 60 * 1024 * 1024) {
+            return await m.reply("❌ Video එක ලොකු වැඩියි මචං. 60MB ට අඩු video එකක් try කරන්න.");
         }
 
         await m.reply("⏳ Video එක 60fps smooth කරනවා... ටිකක් ඉන්න.");
@@ -118,10 +131,10 @@ Sparky({
             caption: "✅ 60fps Smooth video ready!"
         }, { quoted: m });
 
-        await m.react?.("✅");
+        await m.react("✅");
     } catch (err) {
         console.log("Smooth command error:", err);
-        await m.react?.("❌");
+        await m.react("❌");
 
         await m.reply(
             "❌ Video එක smooth කරන්න බැරි වුණා මචං.\n\n" +
