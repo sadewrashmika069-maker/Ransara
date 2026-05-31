@@ -1,5 +1,7 @@
 const { Sparky, isPublic } = require("../lib");
-const axios = require("axios");
+const { spawn } = require("child_process");
+
+const ffmpegBin = "ffmpeg";
 
 function getArgsText(args, m) {
     if (Array.isArray(args)) return args.join(" ").trim();
@@ -13,68 +15,110 @@ function getArgsText(args, m) {
     ).trim();
 }
 
-function buildAttpUrls(text) {
-    const q = encodeURIComponent(text);
-
-    return [
-        `https://api.betabotz.eu.org/api/maker/attp?text=${q}`,
-        `https://api.ryzendesu.vip/api/maker/attp?text=${q}`,
-        `https://api.agatz.xyz/api/attp?message=${q}`,
-        `https://widipe.com/attp?text=${q}`,
-        `https://api.neoxr.eu/api/attp?text=${q}`,
-        `https://itzpire.com/maker/attp?text=${q}`
-    ];
+function escapeDrawText(text) {
+    return String(text)
+        .replace(/\\/g, "\\\\")
+        .replace(/:/g, "\\:")
+        .replace(/'/g, "\\'")
+        .replace(/\[/g, "\\[")
+        .replace(/\]/g, "\\]")
+        .replace(/,/g, "\\,");
 }
 
-async function downloadBuffer(url) {
-    const res = await axios.get(url, {
-        responseType: "arraybuffer",
-        timeout: 20000,
-        headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "image/webp,image/gif,image/png,image/*,*/*"
-        },
-        validateStatus: (status) => status >= 200 && status < 400
-    });
-
-    const contentType = String(res.headers["content-type"] || "").toLowerCase();
-    const buffer = Buffer.from(res.data);
-
-    if (contentType.includes("application/json")) {
-        const json = JSON.parse(buffer.toString("utf8"));
-
-        const imageUrl =
-            json.result ||
-            json.url ||
-            json.data?.url ||
-            json.data?.result ||
-            json.data?.image ||
-            json.image;
-
-        if (!imageUrl) throw new Error("API JSON response එකේ sticker URL එකක් නෑ");
-        return await downloadBuffer(imageUrl);
-    }
-
-    return buffer;
+function getFontFile() {
+    return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
 }
 
-async function fetchAttpSticker(text) {
-    const urls = buildAttpUrls(text);
-    let lastError = null;
+function getFontSize(text) {
+    const length = text.length;
 
-    for (const url of urls) {
-        try {
-            const buffer = await downloadBuffer(url);
+    if (length <= 6) return 72;
+    if (length <= 10) return 62;
+    if (length <= 16) return 52;
+    if (length <= 24) return 42;
 
-            if (buffer && buffer.length > 1000) {
-                return buffer;
+    return 34;
+}
+
+function createAttpSticker(text) {
+    return new Promise((resolve, reject) => {
+        const safeText = escapeDrawText(text);
+        const font = getFontFile();
+        const fontSize = getFontSize(text);
+
+        const filter =
+            "color=c=black@0.0:s=512x512:d=3:r=15,format=rgba," +
+            "drawtext=" +
+            `fontfile=${font}:` +
+            `text='${safeText}':` +
+            `fontsize=${fontSize}:` +
+            "fontcolor_expr=if(lt(mod(t\\,1.2)\\,0.2)\\,red\\,if(lt(mod(t\\,1.2)\\,0.4)\\,yellow\\,if(lt(mod(t\\,1.2)\\,0.6)\\,lime\\,if(lt(mod(t\\,1.2)\\,0.8)\\,cyan\\,magenta)))):" +
+            "borderw=5:" +
+            "bordercolor=white:" +
+            "x=(w-text_w)/2:" +
+            "y=(h-text_h)/2 + 35*sin(2*PI*t):" +
+            "box=0";
+
+        const args = [
+            "-hide_banner",
+            "-loglevel", "error",
+            "-f", "lavfi",
+            "-i", filter,
+            "-loop", "0",
+            "-lossless", "0",
+            "-compression_level", "6",
+            "-q:v", "65",
+            "-preset", "picture",
+            "-an",
+            "-vsync", "0",
+            "-f", "webp",
+            "pipe:1"
+        ];
+
+        const ffmpeg = spawn(ffmpegBin, args, {
+            stdio: ["ignore", "pipe", "pipe"]
+        });
+
+        const outputChunks = [];
+        const errorChunks = [];
+
+        const timeout = setTimeout(() => {
+            ffmpeg.kill("SIGKILL");
+            reject(new Error("ATTP render timeout වුණා."));
+        }, 60 * 1000);
+
+        ffmpeg.stdout.on("data", (chunk) => outputChunks.push(chunk));
+        ffmpeg.stderr.on("data", (chunk) => errorChunks.push(chunk));
+
+        ffmpeg.on("error", (err) => {
+            clearTimeout(timeout);
+
+            if (err.code === "ENOENT") {
+                reject(new Error("FFmpeg install කරලා නෑ. Workflow එකට FFmpeg install step එක add කරන්න."));
+            } else {
+                reject(err);
             }
-        } catch (err) {
-            lastError = err;
-        }
-    }
+        });
 
-    throw lastError || new Error("ATTP sticker එක හදාගන්න බැරි වුණා");
+        ffmpeg.on("close", (code) => {
+            clearTimeout(timeout);
+
+            if (code === 0) {
+                const buffer = Buffer.concat(outputChunks);
+
+                if (!buffer || buffer.length < 1000) {
+                    reject(new Error("Sticker output එක empty වුණා."));
+                    return;
+                }
+
+                resolve(buffer);
+                return;
+            }
+
+            const errorText = Buffer.concat(errorChunks).toString("utf8");
+            reject(new Error(errorText || `FFmpeg failed with code ${code}`));
+        });
+    });
 }
 
 Sparky({
@@ -90,18 +134,17 @@ Sparky({
         if (!text) {
             return await m.reply(
                 "✍️ Sticker කරන්න text එකක් දෙන්න මචං.\n\n" +
-                "උදා:\n" +
-                ".attp Sadew Mini"
+                "උදා:\n.attp Sadew Mini"
             );
         }
 
-        if (text.length > 80) {
-            return await m.reply("❌ Text එක දිග වැඩියි මචං. characters 80 ට අඩුවෙන් දෙන්න.");
+        if (text.length > 35) {
+            return await m.reply("❌ Text එක දිග වැඩියි මචං. characters 35 ට අඩුවෙන් දෙන්න.");
         }
 
         await m.react("🎨");
 
-        const stickerBuffer = await fetchAttpSticker(text);
+        const stickerBuffer = await createAttpSticker(text);
 
         await client.sendMessage(m.jid, {
             sticker: stickerBuffer
@@ -114,7 +157,7 @@ Sparky({
 
         await m.reply(
             "❌ ATTP sticker එක හදාගන්න බැරි වුණා මචං.\n\n" +
-            "වෙන text එකක් try කරන්න."
+            "හේතුව: " + err.message
         );
     }
 });
