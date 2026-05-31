@@ -3,17 +3,17 @@ const {
   isPublic
 } = require("../lib");
 const { getString, isUrl } = require('./pluginsCore');
-const axios = require('axios'); // ⚡ වේගවත් බාගැනීම් සඳහා Axios භාවිතය
+const axios = require('axios'); // ⚡ වේගවත් බාගැනීම් සහ RAM Streaming සඳහා Axios භාවිතය
 const lang = getString('download');
 
-// 🌐 YouTube සර්වර් බ්ලොක් සහ Speed Limits මඟහැරීමට Headers
+// 🌐 YouTube සර්වර් Speed Limits මඟහැරීමට Headers
 const SAFE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept": "*/*"
 };
 
 // ==========================================
-// 🔎 1. YTS COMMAND (ULTRA FAST SEARCH)
+// 🔎 1. YTS COMMAND (ULTRA FAST SEARCH / INFO)
 // ==========================================
 Sparky({
   name: "yts",
@@ -21,20 +21,33 @@ Sparky({
   category: "youtube",
   desc: "search in youtube"
 }, async ({ m, client, args }) => {
-  if (!args) return await m.reply(lang.NEED_Q);
   const query = Array.isArray(args) ? args.join(" ") : args;
+  if (!query) return await m.reply(lang.NEED_Q);
   
   await m.react('🔎');
   try {
-    // Whiteshadow Search Engine එක භාවිතය
-    const searchApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/search/yt?q=" + encodeURIComponent(query) + "&apitoken=VK4fry";
-    const res = await axios.get(searchApi, { timeout: 8000 });
-    const videos = res.data?.result || res.data?.response || [];
-    
-    if (videos.length === 0) return m.reply("_❌ මචං සර්ච් රිසල්ට් කිසිවක් හමුවුණේ නැහැ._");
+    if (await isUrl(query)) {
+      // ලින්ක් එකක් දුන්නොත් ක්ෂණයකින් විස්තර ලබාගැනීම
+      const searchApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/search/yt?q=" + encodeURIComponent(query) + "&apitoken=VK4fry";
+      const res = await axios.get(searchApi, { timeout: 7000 });
+      const video = res.data?.result?.[0] || res.data?.response?.[0];
+      
+      if (!video) return m.reply("_❌ මචං මේ ලින්ක් එකේ විස්තර සොයාගන්න ලැබුණේ නැහැ._");
+      return await client.sendMessage(m.jid, { 
+        image: { url: video.thumbnail || video.image }, 
+        caption: "*title :* " + video.title + "\n*author :* " + (video.author || "Unknown") + "\n*url :* " + query 
+      });
+    } else {
+      // නමක් දුන්නොත් YouTube සර්ච් කර ලයිස්තුව ලබාදීම
+      const searchApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/search/yt?q=" + encodeURIComponent(query) + "&apitoken=VK4fry";
+      const res = await axios.get(searchApi, { timeout: 7000 });
+      const videos = res.data?.result || res.data?.response || [];
+      
+      if (videos.length === 0) return m.reply("_❌ මචං සර්ච් රිසල්ට් කිසිවක් හමුවුණේ නැහැ._");
 
-    const result = videos.slice(0, 10).map(video => `*🏷️ Title :* _*${video.title}*_\n*📁 Duration :* _${video.duration || video.timestamp || 'N/A'}_\n*🔗 Link :* _${video.url || video.link}_`);
-    return await m.reply(`\n\n_*Result Of ${query} 🔍*_\n\n` + result.join('\n\n'));
+      const result = videos.slice(0, 8).map(video => `*🏷️ Title :* _*${video.title}*_\n*📁 Duration :* _${video.duration || video.timestamp || 'N/A'}_\n*🔗 Link :* _${video.url || video.link}_`);
+      return await m.reply(`\n\n_*Result Of ${query} 🔍*_\n\n` + result.join('\n\n'));
+    }
   } catch (error) {
     await m.react('❌');
     return m.reply(`_❌ Search Error: ${error.message}_`);
@@ -42,7 +55,7 @@ Sparky({
 });
 
 // ==========================================
-// 🎬 2. YTV COMMAND (HIGH SPEED VIDEO)
+// 🎬 2. YTV COMMAND (HIGH SPEED VIDEO DOWNLAOD)
 // ==========================================
 Sparky({
   name: "ytv",
@@ -52,20 +65,21 @@ Sparky({
 }, async ({ m, client, args }) => {
     try {
       args = args || m.quoted?.text;
-      if (!args) return await m.reply(lang.NEED_URL);
-      if (!await isUrl(args)) return await m.reply(lang.INVALID_LINK);
+      const query = Array.isArray(args) ? args.join(" ") : args;
+      if (!query) return await m.reply(lang.NEED_URL);
+      if (!await isUrl(query)) return await m.reply(lang.INVALID_LINK);
       
       await m.react('⬇️');
       
       // High-Speed Link Extraction
-      const dlApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/download/yt?url=" + encodeURIComponent(args) + "&apitoken=VK4fry";
+      const dlApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/download/yt?url=" + encodeURIComponent(query) + "&apitoken=VK4fry";
       const res = await axios.get(dlApi, { timeout: 10000 });
       const d = res.data?.result || res.data?.response;
       let videoUrl = d?.mp4 || d?.download || d?.url || d?.link;
 
       if (!videoUrl) return m.reply("_❌ වීඩියෝ ඩවුන්ලෝඩ් ලින්ක් එක ලබාගත නොහැක._");
 
-      // Streaming directly to RAM Buffer to bypass limits
+      // ඩිස්ක් එකට නොලියා කෙලින්ම RAM එකට Stream කිරීම
       const stream = await axios.get(videoUrl, { responseType: 'arraybuffer', headers: SAFE_HEADERS, timeout: 35000 });
       const buffer = Buffer.from(stream.data);
 
@@ -78,7 +92,7 @@ Sparky({
 });
 
 // ==========================================
-// 🎵 3. YTA COMMAND (HIGH QUALITY AUDIO)
+// 🎵 3. YTA COMMAND (HIGH QUALITY AUDIO DOWNLOAD)
 // ==========================================
 Sparky({
   name: "yta",
@@ -88,24 +102,25 @@ Sparky({
 }, async ({ m, client, args }) => {
     try {
       args = args || m.quoted?.text;
-      if (!args) return await m.reply(lang.NEED_URL);
-      if (!await isUrl(args)) return await m.reply(lang.INVALID_LINK);
+      const query = Array.isArray(args) ? args.join(" ") : args;
+      if (!query) return await m.reply(lang.NEED_URL);
+      if (!await isUrl(query)) return await m.reply(lang.INVALID_LINK);
       
       await m.react('⬇️');
       
       let mp3Url = null;
       // Server 1 Try
       try {
-          const dlApi1 = "https://whiteshadow-x-api." + "vercel.app" + "/api/download/yt?url=" + encodeURIComponent(args) + "&apitoken=VK4fry";
+          const dlApi1 = "https://whiteshadow-x-api." + "vercel.app" + "/api/download/yt?url=" + encodeURIComponent(query) + "&apitoken=VK4fry";
           const res1 = await axios.get(dlApi1, { timeout: 8000 });
           const d1 = res1.data?.result || res1.data?.response;
           mp3Url = d1?.mp3 || d1?.download || d1?.url || d1?.link;
       } catch (e) {}
 
-      // Server 2 Failover Backup
+      // Server 2 Backup Failover
       if (!mp3Url) {
           try {
-              const dlApi2 = "https://api-dark-shan-yt." + "koyeb.app" + "/download/ytmp3?url=" + encodeURIComponent(args);
+              const dlApi2 = "https://api-dark-shan-yt." + "koyeb.app" + "/download/ytmp3?url=" + encodeURIComponent(query);
               const res2 = await axios.get(dlApi2, { timeout: 8000 });
               const d2 = res2.data?.result || res2.data?.response;
               mp3Url = d2?.mp3 || d2?.download || d2?.url || d2?.link;
@@ -131,20 +146,21 @@ Sparky({
 const playSongHandler = async ({ m, client, args }) => {
     try {
       args = args || m.quoted?.text;
-      if (!args) return await m.reply(lang.NEED_Q);
+      const query = Array.isArray(args) ? args.join(" ") : args;
+      if (!query) return await m.reply(lang.NEED_Q);
       
       await m.react('🔎');
       let videoUrl = null;
       let finalMp3Url = null;
-      let songTitle = args;
+      let songTitle = query;
 
-      // Stage 1: Fast Search via Whiteshadow Engine
+      // Stage 1: Fast Search Engine
       try {
-          const searchApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/search/yt?q=" + encodeURIComponent(args) + "&apitoken=VK4fry";
+          const searchApi = "https://whiteshadow-x-api." + "vercel.app" + "/api/search/yt?q=" + encodeURIComponent(query) + "&apitoken=VK4fry";
           const searchRes = await axios.get(searchApi, { timeout: 6000 });
           const ytResult = searchRes.data?.result?.[0] || searchRes.data?.response?.[0];
           videoUrl = ytResult?.url || ytResult?.link;
-          songTitle = ytResult?.title || args;
+          songTitle = ytResult?.title || query;
           
           if (videoUrl) await m.reply(`_📥 Downloading: ${songTitle}_`);
       } catch (err) { console.log("Search 1 failed, bypassing to direct query..."); }
@@ -171,7 +187,7 @@ const playSongHandler = async ({ m, client, args }) => {
       // Backup Engine 3 (Direct Query Scraper)
       if (!finalMp3Url) {
           try {
-              const dlApi3 = "https://api." + "dreaded" + ".site/api/ytdl?url=" + encodeURIComponent(args);
+              const dlApi3 = "https://api." + "dreaded" + ".site/api/ytdl?url=" + encodeURIComponent(query);
               const res3 = await axios.get(dlApi3, { timeout: 10000 });
               const d3 = res3.data?.result || res3.data?.response;
               finalMp3Url = d3?.audio || d3?.mp3 || d3?.download || d3?.url;
@@ -195,6 +211,6 @@ const playSongHandler = async ({ m, client, args }) => {
     }
 };
 
-// Play සහ Song කමාන්ඩ්ස් දෙකම වේගවත් Hybrid Engine එකට සම්බන්ධ කිරීම
+// Play සහ Song කමාන්ඩ්ස් දෙකම වේගවත් Hybrid Handler එකට සම්බන්ධ කිරීම
 Sparky({ name: "play", fromMe: isPublic, category: "youtube", desc: "play a song" }, playSongHandler);
 Sparky({ name: "song", fromMe: isPublic, category: "youtube", desc: "play a song" }, playSongHandler);
