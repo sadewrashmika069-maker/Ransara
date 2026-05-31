@@ -1,127 +1,95 @@
-const {Sparky, isPublic} = require("../lib");
-const {getString, getJson} = require('./pluginsCore');
+const { Sparky, isPublic } = require("../lib");
+const fs = require("fs");
+const path = require("path");
 const PDFDocument = require("pdfkit");
-const lang = getString('converters');
-let fs = require('fs');
-
-let pdfStore = {};
 
 Sparky({
     name: "pdf",
+    category: "misc",
     fromMe: isPublic,
-    category: "pdf converters",
-    desc: "Convert stored images into PDF",
-}, async ({ m, client }) => {
-
+    desc: "Converts a replied image into a high-quality PDF document"
+}, async ({ client, m }) => {
+    let tempImg = null;
+    let tempPdf = null;
+    
     try {
-        if (!pdfStore[m.jid] || pdfStore[m.jid].length === 0) {
-            return m.reply("⚠️ No images stored");
+        // 🔍 රිප්ලයි කරපු මැසේජ් එකක් තියෙනවද සහ ඒක ෆොටෝ එකක්ද කියලා බලනවා
+        const isImage = m.quoted && (m.quoted.mimetype?.startsWith("image/") || m.quoted.msg?.mimetype?.startsWith("image/"));
+        
+        if (!isImage) {
+            return await m.reply("_❌ කරුණාකර PDF එකක් බවට හරවන්න ඕනේ ෆොටෝ එකකට Reply කරලා .pdf ගහන්න!_");
         }
 
-        await m.react("⏳");
+        await m.react("📄"); // 📄 ඉමෝජි එකෙන් වැඩේ පටන් ගත්තා කියලා පෙන්වනවා
 
-        const filePath = `./temp_${Date.now()}.pdf`;
-        const doc = new PDFDocument();
+        // 📥 ෆොටෝ එක සර්වර් එකට ඩවුන්ලෝඩ් කරගන්නවා
+        const media = await m.quoted.download().catch(() => null);
+        
+        if (!media) {
+            await m.react("❌");
+            return await m.reply("_❌ ෆොටෝ එක ඩවුන්ලෝඩ් කරගැනීමේ ගැටලුවක් ඇතිවුණා!_");
+        }
 
-        doc.pipe(fs.createWriteStream(filePath));
+        // 📂 ටෙම්පරි ෆයිල් පාත් හදාගන්නවා
+        tempImg = path.join(__dirname, `temp_pdf_img_${Date.now()}.jpg`);
+        tempPdf = path.join(__dirname, `temp_pdf_out_${Date.now()}.pdf`);
+        
+        fs.writeFileSync(tempImg, media);
 
-        pdfStore[m.jid].forEach((item, index) => {
+        // 🛠️ PDF එක නිර්මාණය කිරීම ආරම්භ කරනවා (Standard A4 Page, No Margins)
+        const doc = new PDFDocument({ size: "A4", margin: 0 });
+        const writeStream = fs.createWriteStream(tempPdf);
+        
+        doc.pipe(writeStream);
 
-            if (index !== 0) doc.addPage();
+        // 🎨 ෆොටෝ එක A4 පිටුවට හරියටම මැදිවෙලා ෆිට් වෙන විදිහට (Fit to Page) සකසනවා
+        doc.image(tempImg, 0, 0, {
+            fit: [595.28, 841.89],
+            align: "center",
+            valign: "center"
+        });
+        
+        doc.end();
 
-            if (item.type === "image") {
-                doc.image(item.content, {
-                    fit: [500, 700],
-                    align: "center",
-                    valign: "center"
-                });
-            }
+        // ⏳ PDF එක සම්පූර්ණයෙන්ම සර්වර් එකේ ලියලා ඉවර වෙනකන් පොඩ්ඩක් ඉන්නවා
+        writeStream.on("finish", async () => {
+            try {
+                const pdfBuffer = fs.readFileSync(tempPdf);
 
-            if (item.type === "text") {
-                doc
-                    .fontSize(16)
-                    .text(item.content, {
-                        align: "left"
-                    });
+                // 🗑️ වැඩේ ඉවර වුණු ගමන් ටෙම්පරි ෆයිල්ස් ඩිලීට් කරනවා Storage ඉතුරු වෙන්න
+                if (fs.existsSync(tempImg)) fs.unlinkSync(tempImg);
+                if (fs.existsSync(tempPdf)) fs.unlinkSync(tempPdf);
+
+                await m.react("✅");
+
+                // 📤 හදපු PDF එක වට්ස්ඇප් එකට Document එකක් විදිහට යවනවා
+                return await client.sendMessage(m.jid, {
+                    document: pdfBuffer,
+                    mimetype: "application/pdf",
+                    fileName: `SADEW-MD_${Date.now()}.pdf`
+                }, { quoted: m });
+
+            } catch (innerError) {
+                throw innerError;
             }
         });
 
-
-        doc.end();
-
-        setTimeout(async () => {
-            await client.sendMessage(m.jid, {
-                document: fs.readFileSync(filePath),
-                mimetype: "application/pdf",
-                fileName: "xbotmd.pdf"
-            }, { quoted: m });
-
-            fs.unlinkSync(filePath);
-            pdfStore[m.jid] = [];
-
-            await m.react("✅");
-        }, 2000);
-
-    } catch (err) {
-        console.log(err);
+    } catch (error) {
+        console.error("PDF Tools Error:", error);
         await m.react("❌");
-        m.reply("Error creating PDF 😅");
+        
+        // 🗑️ එරර් එකක් ආවත් ටෙම්පරි ෆයිල්ස් ක්ලීන් කරනවා
+        if (tempImg && fs.existsSync(tempImg)) fs.unlinkSync(tempImg);
+        if (tempPdf && fs.existsSync(tempPdf)) fs.unlinkSync(tempPdf);
+        
+        // 📝 ඔයා ඉල්ලපු විදිහටම සම්පූර්ණ සිස්ටම් එරර් එක ලස්සනට වට්ස්ඇප් එකට එනවා මචං
+        let errorMsg = `_❌ PDF System Error:_\n\`\`\`${error.message || error}\`\`\`\n\n`;
+        errorMsg += `*📊 Debug Info:*\n`;
+        errorMsg += `• Error Code: \`${error.code || "UNKNOWN"}\`\n\n`;
+        errorMsg += `*💡 ෂුවර් එකටම මේවා කලාද බලන්න:* \n`;
+        errorMsg += `1. \`package.json\` එකට \`"pdfkit"\` පැකේජ් එක ඇතුලත් කරලා GitHub එකට Push කරාද?\n`;
+        errorMsg += `2. සර්වර් එක අලුතෙන් Build වෙලා ඉවර වෙනකන් විනාඩියක් විතර ඉඳලා ආයේ ට්‍රැයි කරන්න මචං.`;
+        
+        return await m.reply(errorMsg);
     }
-});
-
-Sparky({
-    name: "addimg",
-    fromMe: isPublic,
-    category: "pdf converters",
-    desc: "Add image to PDF list",
-}, async ({ m }) => {
-
-    if (!m.quoted || !m.quoted.message.imageMessage) {
-        return m.reply("_Reply to an image_");
-    }
-
-    await m.react("⏳");
-
-    const buffer = await m.quoted.download();
-
-    if (!pdfStore[m.jid]) pdfStore[m.jid] = [];
-
-    pdfStore[m.jid].push({
-        type: "image",
-        content: buffer
-    });
-
-    await m.react("🍻");
-    m.reply(`_🖼️ Image added\n${pdfStore[m.jid].length}_`);
-});
-
-Sparky({
-    name: "addtext",
-    fromMe: isPublic,
-    category: "pdf converters",
-    desc: "Add text to PDF",
-}, async ({ m }) => {
-
-    const text = m.quoted?.text || m.text.split(" ").slice(1).join(" ");
-
-    if (!text) return m.reply("_Provide or reply to text_");
-
-    if (!pdfStore[m.jid]) pdfStore[m.jid] = [];
-
-    pdfStore[m.jid].push({
-        type: "text",
-        content: text
-    });
-
-    m.reply(`_📝 Text added\n${pdfStore[m.jid].length}_`);
-});
-
-Sparky({
-    name: "clear",
-    fromMe: isPublic,
-    category: "pdf converters",
-    desc: "Clear stored images",
-}, async ({ m }) => {
-    pdfStore[m.jid] = [];
-    m.reply("_🗑️ Cleared stored images_");
 });
