@@ -13,10 +13,14 @@ Sparky({
     desc: "Combine multiple images or a single image into a PDF"
 }, async ({ client, m, text }) => {
     const userId = m.sender;
-    const cmd = text ? text.trim().toLowerCase() : "";
+    
+    // 🔥 බොට් ෆ්‍රේම්වර්ක් එකේ ලෙඩ බයිපාස් කරන්න කෙලින්ම මැසේජ් බොඩි එකෙන්ම වචන අල්ලනවා
+    const msgText = (m.body || m.text || text || "").trim().toLowerCase();
+    const isExport = msgText.includes("export") || msgText.includes("done") || msgText.includes("download");
+    const isClear = msgText.includes("clear") || msgText.includes("reset");
 
     // 📄 1. PDF එක නිපදවා බාගත කිරීම (.pdf export)
-    if (cmd === "export" || cmd === "done" || cmd === "download") {
+    if (isExport) {
         if (!global.pdfSessions[userId] || global.pdfSessions[userId].length === 0) {
             await m.react("❌");
             return await m.reply("_❌ ඔයා තවම කිසිම ෆොටෝ එකක් එකතු කරලා නැහැ මචං!_");
@@ -57,7 +61,7 @@ Sparky({
                     if (fs.existsSync(tempPdf)) fs.unlinkSync(tempPdf);
                     tempImages.forEach(img => { if (fs.existsSync(img)) fs.unlinkSync(img); });
                     
-                    delete global.pdfSessions[userId]; // සෙෂන් එක ක්ලීන් කරනවා
+                    delete global.pdfSessions[userId]; // වැඩේ ඉවර නිසා සෙෂන් එක මකනවා
 
                     await m.react("✅");
                     return await client.sendMessage(m.jid, {
@@ -77,7 +81,7 @@ Sparky({
     }
 
     // 🧹 2. ලිස්ට් එක Clear කිරීම (.pdf clear)
-    if (cmd === "clear" || cmd === "reset") {
+    if (isClear) {
         if (global.pdfSessions[userId]) {
             delete global.pdfSessions[userId];
             await m.react("🧹");
@@ -88,10 +92,17 @@ Sparky({
 
     // 📥 3. ෆොටෝ එකින් එක එකතු කරගැනීම (.pdf)
     if (!m.quoted) {
-        return await m.reply("_💡 ෆොටෝ එකකට රිප්ලයි කරලා .pdf ගහන්න. ෆොටෝ ඔක්කොම එකතු කරලා ඉවර වුණාම .pdf export ගහන්න මචං._");
+        let usageMsg = `*📄 SADEW-MD MULTI-IMAGE PDF TOOL 📄*\n\n`;
+        usageMsg += `• *ෆොටෝ එකතු කරන්න:* ඕනෑම ෆොටෝ එකකට රිප්ලයි කරලා \`*.pdf*\` ගහන්න.\n`;
+        usageMsg += `• *PDF එක හදන්න:* ෆොටෝ ඔක්කොම එකතු කරලා ඉවර වුණාම \`*.pdf export*\` කියලා ටයිප් කරලා යවන්න.\n`;
+        usageMsg += `• *Reset කරන්න:* එකතු කරපු ෆොටෝ අයින් කරන්න \`*.pdf clear*\` ගහන්න.\n\n`;
+        if (global.pdfSessions[userId] && global.pdfSessions[userId].length > 0) {
+            usageMsg += `📊 *ඔයා දැනට ෆොටෝ ${global.pdfSessions[userId].length}ක් එකතු කරලා තියෙන්නේ!*`;
+        }
+        return await m.reply(usageMsg);
     }
 
-    // 🔥 BULLETPROOF IMAGE DETECTION (හැම තැනම පීරලා ෆොටෝ එක අල්ලනවා)
+    // 🔥 BULLETPROOF IMAGE DETECTION
     const mime = m.quoted.mimetype || m.quoted.msg?.mimetype || "";
     const type = m.quoted.type || "";
     const isImage = mime.startsWith("image/") || 
