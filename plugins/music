@@ -1,0 +1,132 @@
+const { Sparky, isPublic, yts, yta } = require("../lib");
+
+function getArgsText(args, m) {
+    if (Array.isArray(args)) return args.join(" ").trim();
+    if (typeof args === "string") return args.trim();
+
+    return (
+        m.quoted?.text ||
+        m.text?.replace(/^[./!#]music\s*/i, "") ||
+        m.body?.replace(/^[./!#]music\s*/i, "") ||
+        ""
+    ).trim();
+}
+
+function isUrl(text) {
+    return /^https?:\/\/\S+/i.test(String(text || ""));
+}
+
+function sanitizeFileName(name) {
+    return String(name || "song")
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80);
+}
+
+function durationToSeconds(duration) {
+    if (!duration) return 0;
+
+    const parts = String(duration).split(":").map(Number);
+    if (parts.some(isNaN)) return 0;
+
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+
+    return parts[0];
+}
+
+function pickBestSong(results) {
+    if (!Array.isArray(results) || !results.length) return null;
+
+    const normalSong = results.find((item) => {
+        const seconds = durationToSeconds(item.duration);
+        return seconds > 0 && seconds <= 15 * 60;
+    });
+
+    return normalSong || results[0];
+}
+
+Sparky({
+    name: "music",
+    category: "download",
+    fromMe: isPublic,
+    desc: "Song name එකෙන් YouTube MP3 audio එකක් send කරන්න"
+}, async ({ client, m, args }) => {
+    try {
+        const query = getArgsText(args, m);
+
+        if (!query) {
+            return await m.reply(
+                "🎵 Song name එකක් දෙන්න මචං.\n\n" +
+                "උදා:\n.music double take"
+            );
+        }
+
+        await m.react?.("🔎");
+
+        let song = null;
+
+        if (isUrl(query)) {
+            song = {
+                title: "YouTube Audio",
+                url: query,
+                duration: "Unknown",
+                author: "YouTube"
+            };
+        } else {
+            const results = await yts(query);
+            song = pickBestSong(results);
+        }
+
+        if (!song || !song.url) {
+            await m.react?.("❌");
+            return await m.reply("❌ Song එක හොයාගන්න බැරි වුණා මචං.");
+        }
+
+        await m.reply(
+            `🎧 *Found Song*\n\n` +
+            `🎵 Title: ${song.title || "Unknown"}\n` +
+            `👤 Artist: ${song.author || "Unknown"}\n` +
+            `⏱️ Duration: ${song.duration || "Unknown"}\n\n` +
+            `_High quality MP3 audio එක prepare කරනවා..._`
+        );
+
+        await m.react?.("⬇️");
+
+        const audioUrl = await yta(song.url);
+
+        if (!audioUrl) {
+            await m.react?.("❌");
+            return await m.reply("❌ Audio download link එක ගන්න බැරි වුණා.");
+        }
+
+        const fileName = `${sanitizeFileName(song.title)}.mp3`;
+
+        try {
+            await client.sendMessage(m.jid, {
+                audio: { url: audioUrl },
+                mimetype: "audio/mpeg",
+                fileName,
+                ptt: false
+            }, { quoted: m });
+        } catch {
+            await m.sendMsg(m.jid, audioUrl, {
+                quoted: m,
+                mimetype: "audio/mpeg",
+                fileName,
+                ptt: false
+            }, "audio");
+        }
+
+        await m.react?.("✅");
+    } catch (err) {
+        console.log("Music command error:", err);
+        await m.react?.("❌");
+
+        await m.reply(
+            "❌ Song එක send කරන්න බැරි වුණා මචං.\n\n" +
+            "හේතුව: " + err.message
+        );
+    }
+});
