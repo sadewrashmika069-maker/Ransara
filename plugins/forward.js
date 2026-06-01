@@ -1,4 +1,4 @@
-const { Sparky } = require("../lib");
+const { Sparky, isPublic } = require("../lib");
 
 function getArgsText(args, m) {
     if (Array.isArray(args)) return args.join(" ").trim();
@@ -14,11 +14,7 @@ function getArgsText(args, m) {
 function toJid(input) {
     const text = String(input || "").trim();
 
-    if (!text) return "";
-
-    if (text.endsWith("@s.whatsapp.net") || text.endsWith("@g.us")) {
-        return text;
-    }
+    if (text.endsWith("@s.whatsapp.net") || text.endsWith("@g.us")) return text;
 
     const number = text.replace(/[^0-9]/g, "");
     if (!number) return "";
@@ -30,7 +26,7 @@ function normalizeQuotedMessage(m) {
     const q = m.quoted;
     if (!q) return null;
 
-    const message = q.message || q?.quotedMessage;
+    const message = q.message || q.quotedMessage;
     if (!message) return null;
 
     return {
@@ -44,24 +40,65 @@ function normalizeQuotedMessage(m) {
     };
 }
 
-function extractTextFallback(quoted) {
+function getTextFromQuoted(quoted) {
     const msg = quoted?.message || {};
+    const doc = msg.documentMessage || msg.documentWithCaptionMessage?.message?.documentMessage;
 
     return (
+        doc?.caption ||
         msg.conversation ||
         msg.extendedTextMessage?.text ||
         msg.imageMessage?.caption ||
         msg.videoMessage?.caption ||
-        msg.documentMessage?.caption ||
         ""
     );
+}
+
+function sanitizeFileName(name) {
+    return String(name || "")
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 150);
+}
+
+function inferFileName(quoted) {
+    const msg = quoted?.message || {};
+    const doc = msg.documentMessage || msg.documentWithCaptionMessage?.message?.documentMessage;
+
+    if (doc?.fileName) return sanitizeFileName(doc.fileName);
+    if (doc?.title) return sanitizeFileName(doc.title);
+
+    const text = getTextFromQuoted(quoted);
+
+    const fileMatch = text.match(/[^\n\r]+?\.(mp4|mkv|avi|mov|pdf|zip|rar|7z|mp3|m4a|jpg|jpeg|png|webp)/i);
+    if (fileMatch) return sanitizeFileName(fileMatch[0]);
+
+    const firstLine = text.split("\n").find(Boolean);
+    if (firstLine) return sanitizeFileName(firstLine) + ".mp4";
+
+    return "";
+}
+
+function applyFileName(content, fileName) {
+    if (!fileName) return;
+
+    if (content.documentMessage) {
+        content.documentMessage.fileName = fileName;
+        content.documentMessage.title = fileName;
+    }
+
+    if (content.documentWithCaptionMessage?.message?.documentMessage) {
+        content.documentWithCaptionMessage.message.documentMessage.fileName = fileName;
+        content.documentWithCaptionMessage.message.documentMessage.title = fileName;
+    }
 }
 
 function loadBaileys() {
     try {
         return require("baileys");
     } catch {
-        throw new Error("baileys package එක හමු වුණේ නෑ. package.json එකේ baileys තියෙනවද බලන්න.");
+        throw new Error("baileys package එක හමු වුණේ නෑ.");
     }
 }
 
@@ -78,6 +115,9 @@ async function safeForward(client, targetJid, quoted) {
     if (!type || !content[type]) {
         throw new Error("Forward content එක generate කරන්න බැරි වුණා.");
     }
+
+    const fileName = inferFileName(quoted);
+    applyFileName(content, fileName);
 
     if (typeof content[type] === "object") {
         content[type].contextInfo = {
@@ -98,13 +138,14 @@ async function safeForward(client, targetJid, quoted) {
 
 async function forwardHandler({ client, m, args }) {
     try {
-        const input = getArgsText(args, m);
-        const targetJid = toJid(input);
+        const targetJid = toJid(getArgsText(args, m));
 
         if (!targetJid) {
             return await m.reply(
                 "📤 Forward කරන්න number/JID එක දෙන්න.\n\n" +
-                "උදා:\n.forward 94712345678\n" +
+                "උදා:\n" +
+                ".forward 94712345678\n" +
+                ".foward 94712345678\n" +
                 ".forward 120363xxxx@g.us"
             );
         }
@@ -119,27 +160,12 @@ async function forwardHandler({ client, m, args }) {
         await m.react?.("📤");
 
         const quoted = normalizeQuotedMessage(m);
-
         if (!quoted) {
             await m.react?.("❌");
             return await m.reply("❌ Quoted message එක read කරන්න බැරි වුණා.");
         }
 
-        try {
-            await safeForward(client, targetJid, quoted);
-        } catch (forwardErr) {
-            const text = extractTextFallback(quoted);
-
-            if (!text) throw forwardErr;
-
-            await client.sendMessage(targetJid, {
-                text,
-                contextInfo: {
-                    forwardingScore: 999,
-                    isForwarded: true
-                }
-            });
-        }
+        await safeForward(client, targetJid, quoted);
 
         await m.react?.("✅");
         await m.reply(`✅ Forward කළා.\n\n📍 Target: ${targetJid}`);
@@ -153,13 +179,13 @@ async function forwardHandler({ client, m, args }) {
 Sparky({
     name: "forward",
     category: "tools",
-    fromMe: true,
+    fromMe: isPublic,
     desc: "Reply message/media/document එක number/JID එකකට forward කරන්න"
 }, forwardHandler);
 
 Sparky({
     name: "foward",
     category: "tools",
-    fromMe: true,
+    fromMe: isPublic,
     desc: "Reply message/media/document එක number/JID එකකට forward කරන්න"
 }, forwardHandler);
