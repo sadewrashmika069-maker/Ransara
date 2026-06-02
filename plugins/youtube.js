@@ -1,10 +1,23 @@
-const { Sparky, isPublic, YtInfo, yts, yta, ytv } = require("../lib");
+const { Sparky, isPublic, YtInfo, yts, yta, ytv: oldYtv } = require("../lib");
 const { getString, isUrl } = require("./pluginsCore");
 const axios = require("axios");
 const { spawn } = require("child_process");
 
-const lang = getString("download") || {};
+const lang = getString("download");
 const ffmpegBin = "ffmpeg";
+
+const WS_YT_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
+const DARK_SHAN_API_KEY = "https://api-dark-shan-yt.koyeb.app/download/ytmp4";
+
+function extractUrl(text) {
+    const match = String(text || "").match(/https?:\/\/[^\s]+/i);
+    return match ? match[0] : "";
+}
+
+function extractQuality(text) {
+    const match = String(text || "").match(/\b(144|240|360|480|720|1080)\b/i);
+    return match ? match[1] : "720";
+}
 
 function sanitizeFileName(name) {
     return String(name || "music")
@@ -29,6 +42,126 @@ function pickBestSong(results) {
         const seconds = durationToSeconds(item.duration);
         return seconds > 0 && seconds <= 15 * 60;
     }) || results[0];
+}
+
+function isMediaUrl(url) {
+    const text = String(url || "").trim();
+
+    return (
+        /^https?:\/\//i.test(text) &&
+        !text.includes("youtube.com/watch") &&
+        !text.includes("youtu.be/") &&
+        !/\.(jpg|jpeg|png|webp|gif)$/i.test(text.split("?")[0])
+    );
+}
+
+function findMediaUrl(data) {
+    const seen = new Set();
+
+    function walk(value) {
+        if (!value) return "";
+        if (typeof value === "object") {
+            if (seen.has(value)) return "";
+            seen.add(value);
+        }
+
+        if (typeof value === "string") {
+            return isMediaUrl(value) ? value.trim() : "";
+        }
+
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                const found = walk(item);
+                if (found) return found;
+            }
+            return "";
+        }
+
+        if (typeof value === "object") {
+            const priorityKeys = [
+                "download_url", "downloadUrl", "download",
+                "video_url", "videoUrl", "video",
+                "audio_url", "audioUrl", "audio",
+                "url", "link", "dl_link", "result", "data"
+            ];
+
+            for (const key of priorityKeys) {
+                if (key in value) {
+                    const found = walk(value[key]);
+                    if (found) return found;
+                }
+            }
+
+            for (const key of Object.keys(value)) {
+                const found = walk(value[key]);
+                if (found) return found;
+            }
+        }
+
+        return "";
+    }
+
+    return walk(data);
+}
+
+async function requestJson(apiUrl, label) {
+    const res = await axios.get(apiUrl, {
+        timeout: 9000,
+        maxRedirects: 5,
+        headers: { "User-Agent": "Mozilla/5.0" },
+        validateStatus: (status) => status >= 200 && status < 500
+    });
+
+    if (res.status >= 400) throw new Error(`${label} HTTP ${res.status}`);
+
+    const mediaUrl = findMediaUrl(res.data);
+    if (!mediaUrl) throw new Error(`${label} media URL not found`);
+
+    return mediaUrl;
+}
+
+async function ytvDarkShan(youtubeUrl, quality) {
+    const apiUrl =
+        `https://api-dark-shan-yt.koyeb.app/download/ytmp4` +
+        `?url=${encodeURIComponent(youtubeUrl)}` +
+        `&quality=${encodeURIComponent(quality)}` +
+        `&apikey=${encodeURIComponent(DARK_SHAN_API_KEY)}`;
+
+    return await requestJson(apiUrl, "DarkShan");
+}
+
+async function ytvWhiteShadow(youtubeUrl, quality) {
+    const apiUrl =
+        `https://whiteshadow-x-api.vercel.app/api/download/yt` +
+        `?url=${encodeURIComponent(youtubeUrl)}` +
+        `&quality=${encodeURIComponent(quality)}` +
+        `&apitoken=${encodeURIComponent(WS_YT_TOKEN)}`;
+
+    return await requestJson(apiUrl, "WhiteShadow");
+}
+
+async function getFastYtvUrl(youtubeUrl, quality) {
+    const providers = [
+        () => ytvDarkShan(youtubeUrl, quality),
+        () => ytvWhiteShadow(youtubeUrl, quality),
+        () => oldYtv(youtubeUrl)
+    ];
+
+    try {
+        return await Promise.any(providers.map((fn) => fn()));
+    } catch {
+        let lastError = null;
+
+        for (const fn of providers) {
+            try {
+                return await fn();
+            } catch (err) {
+                lastError = err;
+            }
+        }
+
+        throw lastError || new Error("All YTV APIs failed");
+    }
 }
 
 async function downloadToBuffer(url) {
@@ -138,9 +271,12 @@ Sparky({
             }, { quoted: m });
         }
 
+        await m.react("🔎");
+
         const videos = await yts(args);
 
         if (!videos || !videos.length) {
+            await m.react("❌");
             return await m.reply("❌ Result එකක් හමු වුණේ නෑ.");
         }
 
@@ -148,9 +284,11 @@ Sparky({
             return `${i + 1}. *${video.title}*\n⏱️ ${video.duration || "Unknown"}\n🔗 ${video.url}`;
         });
 
-        return await m.reply(`_*Result Of ${args} 🔍*_\n\n` + result.join("\n\n"));
+        await m.reply(`_*Result Of ${args} 🔍*_\n\n` + result.join("\n\n"));
+        await m.react("✅");
     } catch (err) {
         console.log("YTS error:", err);
+        await m.react("❌");
         await m.reply("❌ YTS error:\n" + err.message);
     }
 });
@@ -164,14 +302,48 @@ Sparky({
     try {
         args = args || m.quoted?.text;
 
-        if (!args) return await m.reply(lang.NEED_URL || "Need a YouTube URL");
-        if (!await isUrl(args)) return await m.reply(lang.INVALID_LINK || "Invalid link");
+        const youtubeUrl = extractUrl(args);
+        const quality = extractQuality(args);
 
-        await m.react("⬇️");
+        if (!youtubeUrl) {
+            return await m.reply(
+                "🎬 YouTube URL එකක් දෙන්න.\n\n" +
+                "උදා:\n.ytv https://youtu.be/dXJLRrRDkj8\n" +
+                ".ytv 720 https://youtu.be/dXJLRrRDkj8"
+            );
+        }
 
-        const url = await ytv(args);
+        if (!await isUrl(youtubeUrl)) {
+            return await m.reply(lang.INVALID_LINK || "Invalid link");
+        }
 
-        await m.sendMsg(m.jid, url, { quoted: m }, "video");
+        await m.react("🔎");
+
+        await m.reply(
+            `🎬 *YouTube Video Preparing...*\n` +
+            `📺 Quality: ${quality}p\n\n` +
+            `_Fast API එකෙන් link එක fetch කරනවා..._`
+        );
+
+        const start = Date.now();
+        const videoUrl = await getFastYtvUrl(youtubeUrl, quality);
+
+        if (!videoUrl) {
+            await m.react("❌");
+            return await m.reply("❌ Video download link එක ගන්න බැරි වුණා.");
+        }
+
+        await m.react("⬆️");
+
+        await m.sendMsg(
+            m.jid,
+            videoUrl,
+            {
+                quoted: m,
+                caption: `✅ YouTube video ready!\n📺 Quality: ${quality}p\n⏱️ API: ${((Date.now() - start) / 1000).toFixed(1)}s`
+            },
+            "video"
+        );
 
         await m.react("✅");
     } catch (error) {
@@ -190,14 +362,17 @@ Sparky({
     try {
         args = args || m.quoted?.text;
 
-        if (!args) return await m.reply(lang.NEED_URL || "Need a YouTube URL");
-        if (!await isUrl(args)) return await m.reply(lang.INVALID_LINK || "Invalid link");
+        const youtubeUrl = extractUrl(args);
+
+        if (!youtubeUrl) return await m.reply(lang.NEED_URL || "Need a YouTube URL");
+        if (!await isUrl(youtubeUrl)) return await m.reply(lang.INVALID_LINK || "Invalid link");
 
         await m.react("⬇️");
 
+        const yt = await YtInfo(youtubeUrl);
         const song = {
-            title: "YouTube Audio",
-            url: args
+            title: yt?.title || "YouTube Audio",
+            url: youtubeUrl
         };
 
         await sendPhoneSupportedMp3(client, m, song);
@@ -215,7 +390,10 @@ async function songSearchHandler({ m, client, args }) {
         args = args || m.quoted?.text;
 
         if (!args) {
-            return await m.reply("🎵 Song name එකක් දෙන්න.\n\nඋදා: .music mithaya myam");
+            return await m.reply(
+                "🎵 Song name එකක් දෙන්න.\n\n" +
+                "උදා:\n.music mithaya myam"
+            );
         }
 
         await m.react("🔎");
@@ -240,9 +418,9 @@ async function songSearchHandler({ m, client, args }) {
 
         await m.react("✅");
     } catch (error) {
-        console.log("Song/Music error:", error);
+        console.log("Song/Music/Play error:", error);
         await m.react("❌");
-        await m.reply("❌ Song/Music error:\n" + error.message);
+        await m.reply("❌ Song/Music/Play error:\n" + error.message);
     }
 }
 
@@ -255,6 +433,13 @@ Sparky({
 
 Sparky({
     name: "music",
+    fromMe: isPublic,
+    category: "youtube",
+    desc: "Song name එකෙන් phone supported MP3 audio එකක් send කරන්න"
+}, songSearchHandler);
+
+Sparky({
+    name: "play",
     fromMe: isPublic,
     category: "youtube",
     desc: "Song name එකෙන් phone supported MP3 audio එකක් send කරන්න"
