@@ -7,12 +7,11 @@ const lang = getString("download") || {};
 const ffmpegBin = process.env.FFMPEG_PATH || "ffmpeg";
 
 const WS_YT_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
-const DARK_SHAN_API_URL = "https://api-dark-shan-yt.koyeb.app/download/ytmp4";
 const DARK_SHAN_API_KEY = process.env.DARK_SHAN_API_KEY || "";
 
-const REQUEST_TIMEOUT = 120000;
-const API_TIMEOUT = 15000;
-const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
+const API_TIMEOUT = 10000;
+const MEDIA_TIMEOUT = 120000;
+const MAX_VIDEO_BYTES = 64 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 80 * 1024 * 1024;
 
 function extractUrl(text) {
@@ -56,12 +55,24 @@ function prettyBytes(bytes) {
     return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function shortError(error) {
+    return String(error?.message || error || "unknown error").replace(/\s+/g, " ").slice(0, 180);
+}
+
+function tryRequire(name) {
+    try {
+        return require(name);
+    } catch {
+        return null;
+    }
+}
+
 function isProbablyMediaUrl(url) {
     const text = String(url || "").trim();
     const cleanPath = text.split("?")[0].toLowerCase();
 
     if (!/^https?:\/\//i.test(text)) return false;
-    if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/i.test(text)) return false;
+    if (/youtube\.com\/watch|youtube\.com\/shorts|youtu\.be\//i.test(text)) return false;
     if (/\.(jpg|jpeg|png|webp|gif)$/i.test(cleanPath)) return false;
 
     return true;
@@ -93,6 +104,7 @@ function findMediaUrl(data) {
             "download_url",
             "downloadUrl",
             "download",
+            "download_link",
             "dl_url",
             "dlUrl",
             "dl_link",
@@ -133,7 +145,7 @@ function normalizeMediaUrl(value) {
     return findMediaUrl(value);
 }
 
-function axiosHeaders(extra = {}) {
+function headers(extra = {}) {
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
         "Accept": "*/*",
@@ -142,116 +154,357 @@ function axiosHeaders(extra = {}) {
     };
 }
 
-async function requestJson(apiUrl, label) {
+function isMp4Like(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+    return buffer.slice(4, 12).toString("latin1").includes("ftyp");
+}
+
+function validateMediaBuffer(buffer, maxBytes, label) {
+    if (!Buffer.isBuffer(buffer) || !buffer.length) throw new Error(`${label} empty buffer`);
+    if (buffer.length > maxBytes) throw new Error(`${label} too large: ${prettyBytes(buffer.length)}`);
+
+    const preview = buffer.slice(0, 120).toString("utf8").trim().toLowerCase();
+    if (buffer.length < 100 * 1024 && /<!doctype html|<html|{.*error|not found|deployment_not_found/i.test(preview)) {
+        throw new Error(`${label} invalid media response: ${preview.slice(0, 80)}`);
+    }
+
+    return buffer;
+}
+
+async function requestVideoApi(apiUrl, label) {
     const res = await axios.get(apiUrl, {
+        responseType: "arraybuffer",
         timeout: API_TIMEOUT,
-        maxRedirects: 10,
-        headers: axiosHeaders(),
+        maxRedirects: 8,
+        headers: headers(),
         validateStatus: (status) => status >= 200 && status < 500
     });
 
-    if (res.status >= 400) throw new Error(`${label} HTTP ${res.status}`);
+    const body = Buffer.from(res.data || []);
+    const contentType = String(res.headers["content-type"] || "").toLowerCase();
 
-    const mediaUrl = normalizeMediaUrl(res.data);
+    if (res.status >= 400) {
+        const text = body.toString("utf8").replace(/\s+/g, " ").slice(0, 160);
+        throw new Error(`${label} HTTP ${res.status}: ${text}`);
+    }
+
+    if (/video|octet-stream|force-download|binary/i.test(contentType) || isMp4Like(body)) {
+        return { buffer: validateMediaBuffer(body, MAX_VIDEO_BYTES, label) };
+    }
+
+    const text = body.toString("utf8").trim();
+    let data = null;
+
+    try {
+        data = JSON.parse(text);
+    } catch {
+        const url = normalizeMediaUrl(text) || extractUrl(text);
+        if (url && isProbablyMediaUrl(url)) return { mediaUrl: url };
+        throw new Error(`${label} no JSON/media URL in response`);
+    }
+
+    const mediaUrl = normalizeMediaUrl(data);
     if (!mediaUrl) throw new Error(`${label} media URL not found`);
 
-    return mediaUrl;
-}
-
-async function ytvDarkShan(youtubeUrl, quality) {
-    const params = new URLSearchParams({
-        url: youtubeUrl,
-        quality
-    });
-
-    if (DARK_SHAN_API_KEY) params.set("apikey", DARK_SHAN_API_KEY);
-
-    return await requestJson(`${DARK_SHAN_API_URL}?${params.toString()}`, "DarkShan");
-}
-
-async function ytvWhiteShadow(youtubeUrl, quality) {
-    const params = new URLSearchParams({
-        url: youtubeUrl,
-        quality,
-        apitoken: WS_YT_TOKEN
-    });
-
-    return await requestJson(`https://whiteshadow-x-api.vercel.app/api/download/yt?${params.toString()}`, "WhiteShadow");
-}
-
-async function ytvLocalLib(youtubeUrl) {
-    const media = await oldYtv(youtubeUrl);
-    const mediaUrl = normalizeMediaUrl(media);
-    if (!mediaUrl) throw new Error("Local ytv media URL not found");
-    return mediaUrl;
-}
-
-function buildQualityList(requestedQuality) {
-    const qualities = [String(requestedQuality || "720"), "720", "480", "360", "240", "144"];
-    return [...new Set(qualities.filter(Boolean))];
-}
-
-function buildVideoProviders(youtubeUrl, quality) {
-    return [
-        {
-            name: "DarkShan",
-            getUrl: () => ytvDarkShan(youtubeUrl, quality)
-        },
-        {
-            name: "WhiteShadow",
-            getUrl: () => ytvWhiteShadow(youtubeUrl, quality)
-        },
-        {
-            name: "LocalLib",
-            getUrl: () => ytvLocalLib(youtubeUrl)
-        }
-    ];
+    return { mediaUrl };
 }
 
 async function downloadToBuffer(url, maxBytes = MAX_VIDEO_BYTES) {
     const res = await axios.get(url, {
         responseType: "arraybuffer",
-        timeout: REQUEST_TIMEOUT,
+        timeout: MEDIA_TIMEOUT,
         maxRedirects: 20,
-        headers: axiosHeaders(),
+        headers: headers(),
         maxContentLength: maxBytes,
         maxBodyLength: maxBytes,
         validateStatus: (status) => status >= 200 && status < 400
     });
 
-    const buffer = Buffer.from(res.data || []);
-    if (!buffer.length) throw new Error("Downloaded file is empty");
-    if (buffer.length > maxBytes) throw new Error(`File too large: ${prettyBytes(buffer.length)}`);
+    return validateMediaBuffer(Buffer.from(res.data || []), maxBytes, "download");
+}
 
-    return buffer;
+function buildQualityList(requestedQuality) {
+    const requested = String(requestedQuality || "720").replace(/\D/g, "") || "720";
+    const qualities = [requested, "720", "480", "360", "240", "144"];
+    return [...new Set(qualities)];
+}
+
+function makeApiProviders(youtubeUrl, quality) {
+    const q = String(quality || "720").replace(/\D/g, "") || "720";
+    const qWithP = `${q}p`;
+
+    const providers = [
+        {
+            name: "WhiteShadow",
+            url: `https://whiteshadow-x-api.vercel.app/api/download/yt?url=${encodeURIComponent(youtubeUrl)}&quality=${encodeURIComponent(q)}&apitoken=${encodeURIComponent(WS_YT_TOKEN)}`
+        },
+        {
+            name: "Gifted",
+            url: `https://api.gifted.my.id/api/download/dlmp4?apikey=gifted&url=${encodeURIComponent(youtubeUrl)}`
+        },
+        {
+            name: "DavidCyril",
+            url: `https://api.davidcyriltech.my.id/download/ytmp4?url=${encodeURIComponent(youtubeUrl)}`
+        },
+        {
+            name: "Nekorinn",
+            url: `https://api.nekorinn.my.id/downloader/ytmp4?url=${encodeURIComponent(youtubeUrl)}&quality=${encodeURIComponent(qWithP)}`
+        },
+        {
+            name: "FastRest",
+            url: `https://fastrestapis.fasturl.cloud/downup/ytmp4?url=${encodeURIComponent(youtubeUrl)}&quality=${encodeURIComponent(q)}`
+        },
+        {
+            name: "Agatz",
+            url: `https://api.agatz.xyz/api/ytmp4?url=${encodeURIComponent(youtubeUrl)}`
+        },
+        {
+            name: "Diioffc",
+            url: `https://api.diioffc.web.id/api/download/ytmp4?url=${encodeURIComponent(youtubeUrl)}`
+        }
+    ];
+
+    if (DARK_SHAN_API_KEY) {
+        providers.unshift({
+            name: "DarkShan",
+            url: `https://api-dark-shan-yt.koyeb.app/download/ytmp4?url=${encodeURIComponent(youtubeUrl)}&quality=${encodeURIComponent(q)}&apikey=${encodeURIComponent(DARK_SHAN_API_KEY)}`
+        });
+    }
+
+    return providers;
+}
+
+async function resolveExternalApis(youtubeUrl, quality) {
+    const providers = makeApiProviders(youtubeUrl, quality);
+    const jobs = providers.map(async (provider) => {
+        const result = await requestVideoApi(provider.url, provider.name);
+        return { ...result, provider: provider.name };
+    });
+
+    const settled = await Promise.allSettled(jobs);
+    const usable = [];
+
+    settled.forEach((item, index) => {
+        const provider = providers[index].name;
+        if (item.status === "fulfilled") {
+            usable.push(item.value);
+        } else {
+            console.log("YTV API failed:", `${provider} ${quality}p: ${shortError(item.reason)}`);
+        }
+    });
+
+    return usable;
+}
+
+function streamToBuffer(stream, maxBytes, label) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let total = 0;
+        let finished = false;
+
+        function finish(error, buffer) {
+            if (finished) return;
+            finished = true;
+            if (error) return reject(error);
+            resolve(validateMediaBuffer(buffer, maxBytes, label));
+        }
+
+        stream.on("data", (chunk) => {
+            total += chunk.length;
+            if (total > maxBytes) {
+                stream.destroy(new Error(`${label} too large: ${prettyBytes(total)}`));
+                return;
+            }
+            chunks.push(chunk);
+        });
+
+        stream.on("error", (err) => finish(err));
+        stream.on("end", () => finish(null, Buffer.concat(chunks)));
+    });
+}
+
+async function ytdlCoreToBuffer(youtubeUrl, quality) {
+    const ytdl = tryRequire("@distube/ytdl-core") || tryRequire("ytdl-core");
+    if (!ytdl) throw new Error("@distube/ytdl-core not installed");
+
+    const info = await ytdl.getInfo(youtubeUrl);
+    const maxHeight = Number(quality || 720);
+
+    const formats = info.formats
+        .filter((format) => format.hasVideo && format.hasAudio && format.container === "mp4")
+        .filter((format) => !format.height || format.height <= maxHeight)
+        .sort((a, b) => {
+            const ah = Number(a.height || 0);
+            const bh = Number(b.height || 0);
+            if (bh !== ah) return bh - ah;
+            return Number(b.bitrate || 0) - Number(a.bitrate || 0);
+        });
+
+    const format = formats[0] || ytdl.chooseFormat(info.formats, {
+        quality: "highest",
+        filter: "audioandvideo"
+    });
+
+    if (!format) throw new Error("ytdl-core format not found");
+
+    const stream = ytdl.downloadFromInfo(info, {
+        format,
+        highWaterMark: 1 << 25
+    });
+
+    return await streamToBuffer(stream, MAX_VIDEO_BYTES, "ytdl-core");
+}
+
+function makeYtDlpArgs(youtubeUrl, quality) {
+    const maxHeight = String(quality || "720").replace(/\D/g, "") || "720";
+    const format =
+        `best[ext=mp4][height<=${maxHeight}][vcodec!=none][acodec!=none]/` +
+        `best[height<=${maxHeight}][vcodec!=none][acodec!=none]/` +
+        "best[vcodec!=none][acodec!=none]/best";
+
+    return [
+        "--no-playlist",
+        "--quiet",
+        "--no-warnings",
+        "--no-progress",
+        "--force-ipv4",
+        "-f", format,
+        "-o", "-",
+        youtubeUrl
+    ];
+}
+
+function commandToBuffer(command, args, maxBytes, label) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+        const stdout = [];
+        const stderr = [];
+        let total = 0;
+        let done = false;
+
+        const timer = setTimeout(() => {
+            child.kill("SIGKILL");
+            finish(new Error(`${label} timeout`));
+        }, MEDIA_TIMEOUT);
+
+        function finish(error, buffer) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            if (error) return reject(error);
+            resolve(validateMediaBuffer(buffer, maxBytes, label));
+        }
+
+        child.stdout.on("data", (chunk) => {
+            total += chunk.length;
+            if (total > maxBytes) {
+                child.kill("SIGKILL");
+                finish(new Error(`${label} too large: ${prettyBytes(total)}`));
+                return;
+            }
+            stdout.push(chunk);
+        });
+
+        child.stderr.on("data", (chunk) => stderr.push(chunk));
+
+        child.on("error", (err) => finish(err));
+        child.on("close", (code) => {
+            const buffer = Buffer.concat(stdout);
+            const errText = Buffer.concat(stderr).toString("utf8").replace(/\s+/g, " ").trim();
+
+            if (code !== 0) {
+                return finish(new Error(errText || `${label} exited with code ${code}`));
+            }
+
+            finish(null, buffer);
+        });
+    });
+}
+
+async function ytDlpToBuffer(youtubeUrl, quality) {
+    const args = makeYtDlpArgs(youtubeUrl, quality);
+    const candidates = [];
+
+    if (process.env.YTDLP_BIN) {
+        candidates.push({ command: process.env.YTDLP_BIN, args });
+    }
+
+    candidates.push(
+        { command: "yt-dlp", args },
+        { command: "python3", args: ["-m", "yt_dlp", ...args] },
+        { command: "python", args: ["-m", "yt_dlp", ...args] }
+    );
+
+    let lastError = null;
+
+    for (const candidate of candidates) {
+        try {
+            return await commandToBuffer(candidate.command, candidate.args, MAX_VIDEO_BYTES, candidate.command);
+        } catch (err) {
+            lastError = err;
+            console.log("YTV yt-dlp failed:", `${candidate.command}: ${shortError(err)}`);
+        }
+    }
+
+    throw lastError || new Error("yt-dlp not available");
+}
+
+async function localLibToBuffer(youtubeUrl) {
+    const result = await oldYtv(youtubeUrl);
+    const mediaUrl = normalizeMediaUrl(result);
+    if (!mediaUrl) throw new Error("local lib media URL not found");
+    return await downloadToBuffer(mediaUrl, MAX_VIDEO_BYTES);
 }
 
 async function getVideoBufferFromProviders(youtubeUrl, requestedQuality) {
     const errors = [];
 
     for (const quality of buildQualityList(requestedQuality)) {
-        const providers = buildVideoProviders(youtubeUrl, quality);
+        const localProviders = [
+            {
+                name: "yt-dlp",
+                run: () => ytDlpToBuffer(youtubeUrl, quality)
+            },
+            {
+                name: "ytdl-core",
+                run: () => ytdlCoreToBuffer(youtubeUrl, quality)
+            },
+            {
+                name: "LocalLib",
+                run: () => localLibToBuffer(youtubeUrl)
+            }
+        ];
 
-        for (const provider of providers) {
+        for (const provider of localProviders) {
             try {
-                const mediaUrl = await provider.getUrl();
-                const buffer = await downloadToBuffer(mediaUrl, MAX_VIDEO_BYTES);
-
-                return {
-                    buffer,
-                    quality,
-                    provider: provider.name,
-                    mediaUrl
-                };
+                const buffer = await provider.run();
+                return { buffer, quality, provider: provider.name };
             } catch (err) {
-                const msg = `${provider.name} ${quality}p: ${err.message || err}`;
-                errors.push(msg);
-                console.log("YTV provider failed:", msg);
+                const message = `${provider.name} ${quality}p: ${shortError(err)}`;
+                errors.push(message);
+                console.log("YTV provider failed:", message);
+            }
+        }
+
+        const apiResults = await resolveExternalApis(youtubeUrl, quality);
+
+        for (const item of apiResults) {
+            try {
+                if (item.buffer) {
+                    return { buffer: item.buffer, quality, provider: item.provider };
+                }
+
+                const buffer = await downloadToBuffer(item.mediaUrl, MAX_VIDEO_BYTES);
+                return { buffer, quality, provider: item.provider };
+            } catch (err) {
+                const message = `${item.provider} download ${quality}p: ${shortError(err)}`;
+                errors.push(message);
+                console.log("YTV download failed:", message);
             }
         }
     }
 
-    throw new Error(errors.slice(-4).join(" | ") || "All YTV providers failed");
+    throw new Error(errors.slice(-6).join(" | ") || "All video providers failed");
 }
 
 function convertToPhoneMp3(inputBuffer) {
@@ -327,6 +580,27 @@ async function sendPhoneSupportedMp3(client, m, song) {
     }, { quoted: m });
 }
 
+async function sendVideoWithFallback(client, m, video, fileName, caption) {
+    try {
+        await client.sendMessage(m.jid, {
+            video: video.buffer,
+            mimetype: "video/mp4",
+            fileName,
+            caption
+        }, { quoted: m });
+        return;
+    } catch (err) {
+        console.log("YTV video send failed, trying document:", err);
+    }
+
+    await client.sendMessage(m.jid, {
+        document: video.buffer,
+        mimetype: "video/mp4",
+        fileName,
+        caption: `${caption}\n\nVideo send fail una nisa document widihata ewwe.`
+    }, { quoted: m });
+}
+
 Sparky({
     name: "yts",
     fromMe: isPublic,
@@ -368,7 +642,7 @@ Sparky({
     } catch (err) {
         console.log("YTS error:", err);
         await m.react("❌");
-        await m.reply("YTS error:\n" + err.message);
+        await m.reply("YTS error:\n" + shortError(err));
     }
 });
 
@@ -387,7 +661,7 @@ Sparky({
         if (!youtubeUrl) {
             return await m.reply(
                 "YouTube URL ekak denna.\n\n" +
-                "Udaharana:\n.ytv https://youtu.be/dXJLRrRDkj8\n" +
+                "Example:\n.ytv https://youtu.be/dXJLRrRDkj8\n" +
                 ".ytv 720 https://youtu.be/dXJLRrRDkj8"
             );
         }
@@ -399,9 +673,9 @@ Sparky({
         await m.react("🔎");
 
         await m.reply(
-            `🎬 *YouTube Video Preparing...*\n` +
+            `*YouTube Video Preparing...*\n` +
             `Quality: ${quality}p\n\n` +
-            `_API eken link eka aran RAM buffer ekata download karanawa..._`
+            `_API 6+ fallback + yt-dlp try karanawa..._`
         );
 
         const start = Date.now();
@@ -412,17 +686,13 @@ Sparky({
 
         await m.react("⬆️");
 
-        await client.sendMessage(m.jid, {
-            video: video.buffer,
-            mimetype: "video/mp4",
+        await sendVideoWithFallback(
+            client,
+            m,
+            video,
             fileName,
-            caption:
-                `✅ YouTube video ready!\n` +
-                `Quality: ${video.quality}p\n` +
-                `Size: ${prettyBytes(video.buffer.length)}\n` +
-                `API: ${video.provider}\n` +
-                `Time: ${seconds}s`
-        }, { quoted: m });
+            `YouTube video ready!\nQuality: ${video.quality}p\nSize: ${prettyBytes(video.buffer.length)}\nSource: ${video.provider}\nTime: ${seconds}s`
+        );
 
         await m.react("✅");
     } catch (error) {
@@ -430,8 +700,8 @@ Sparky({
         await m.react("❌");
         await m.reply(
             "YTV error una.\n\n" +
-            "Video eka godak loku nam 480/360 quality try karanna.\n" +
-            "Error: " + (error.message || error)
+            "480/360 quality try karanna. Public API dead nam workflow eke yt-dlp install karanna one.\n" +
+            "Error: " + shortError(error)
         );
     }
 });
@@ -464,7 +734,7 @@ Sparky({
     } catch (error) {
         console.log("YTA error:", error);
         await m.react("❌");
-        await m.reply("YTA error:\n" + (error.message || error));
+        await m.reply("YTA error:\n" + shortError(error));
     }
 });
 
@@ -475,7 +745,7 @@ async function songSearchHandler({ m, client, args }) {
         if (!args) {
             return await m.reply(
                 "Song name ekak denna.\n\n" +
-                "Udaharana:\n.music mithaya myam"
+                "Example:\n.music mithaya myam"
             );
         }
 
@@ -490,7 +760,7 @@ async function songSearchHandler({ m, client, args }) {
         }
 
         await m.reply(
-            `🎧 *${song.title}*\n` +
+            `*${song.title}*\n` +
             `Duration: ${song.duration || "Unknown"}\n\n` +
             `_Phone supported MP3 prepare karanawa..._`
         );
@@ -503,7 +773,7 @@ async function songSearchHandler({ m, client, args }) {
     } catch (error) {
         console.log("Song/Music/Play error:", error);
         await m.react("❌");
-        await m.reply("Song/Music/Play error:\n" + (error.message || error));
+        await m.reply("Song/Music/Play error:\n" + shortError(error));
     }
 }
 
