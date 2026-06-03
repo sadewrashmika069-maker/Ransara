@@ -10,7 +10,6 @@ function getQuery(args) {
     return "";
 }
 
-// API Token (ඔයාගේ token එක)
 const API_TOKEN = "VK4fry";
 const API_BASE = "https://whiteshadow-x-api.onrender.com/api";
 
@@ -19,33 +18,43 @@ Sparky({
     alias: ["apkdl", "getapk"],
     category: "download",
     fromMe: isPublic,
-    desc: "📲 Aptoide වෙතින් APK files ඩවුන්ලෝඩ් කරන්න"
+    desc: "📲 Download APK files from Aptoide (WhatsApp, etc.)"
 }, async ({ client, m, args }) => {
     let query = getQuery(args);
     if (!query) {
-        return m.reply(`📲 *APK Downloader (Aptoide)*\n\n*Usage:* ${m.prefix}apk <app name>\n*Example:* ${m.prefix}apk whatsapp\n*Example:* ${m.prefix}apk com.whatsapp\n\n*Note:* App එක හොයාගන්න නම හෝ package name එක දාන්න.`);
+        return m.reply(`📲 *APK Downloader (Aptoide)*\n\n*Usage:* ${m.prefix}apk <app name>\n*Example:* ${m.prefix}apk whatsapp`);
     }
 
     await m.react("⏳");
     await client.sendPresenceUpdate('composing', m.jid);
-    await m.reply(`🔍 *Searching "${query}" on Aptoide...*`);
+    await m.reply(`🔍 Searching for "${query}" on Aptoide...`);
 
     try {
-        // ========== 1. Search for the app ==========
+        // 1. Search
         const searchUrl = `${API_BASE}/search/aptoide?q=${encodeURIComponent(query)}&apitoken=${API_TOKEN}`;
         const searchRes = await axios.get(searchUrl, { timeout: 15000 });
 
-        if (!searchRes.data?.success || !searchRes.data?.results?.length) {
-            throw new Error("No results found");
+        // Check if API call succeeded and has data
+        if (!searchRes.data?.success || !searchRes.data?.data?.length) {
+            throw new Error("No apps found");
         }
 
-        const app = searchRes.data.results[0];
-        const packageName = app.package || query;
-        const appName = app.name || query;
+        // Find the best match (exact match or first result)
+        let bestMatch = searchRes.data.data[0];
+        // Try to find exact match by package name or title
+        const exactMatch = searchRes.data.data.find(app => 
+            app.package === query.toLowerCase() || 
+            app.title.toLowerCase() === query.toLowerCase()
+        );
+        if (exactMatch) bestMatch = exactMatch;
 
-        await m.reply(`✅ *Found:* ${appName}\n⬇️ *Downloading APK...*`);
+        const packageName = bestMatch.package;
+        const appName = bestMatch.title;
+        const appSize = bestMatch.size;
 
-        // ========== 2. Download the APK ==========
+        await m.reply(`✅ *Found:* ${appName}\n📦 Size: ${appSize}\n⬇️ Downloading APK...`);
+
+        // 2. Download using the package name
         const downloadUrl = `${API_BASE}/download/aptoide?package=${packageName}&apitoken=${API_TOKEN}`;
         const downloadRes = await axios.get(downloadUrl, {
             responseType: 'arraybuffer',
@@ -55,12 +64,12 @@ Sparky({
         });
 
         const buffer = Buffer.from(downloadRes.data);
-        if (buffer.length < 100000) throw new Error("Downloaded file is too small");
+        if (buffer.length < 100000) throw new Error("Downloaded file too small (invalid APK)");
 
         const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
         const fileName = `${appName.replace(/[^a-z0-9]/gi, '_')}.apk`;
 
-        const caption = `📲 *${appName}*\n📦 Size: ${fileSizeMB} MB\n📥 *APK ready for install*\n\n> *Powered by Aptoide*`;
+        const caption = `📲 *${appName}*\n📦 Size: ${fileSizeMB} MB\n📥 *APK ready for installation*\n\n> *Powered by Aptoide*`;
 
         await client.sendMessage(m.jid, {
             document: buffer,
@@ -74,12 +83,11 @@ Sparky({
     } catch (error) {
         console.error("APK error:", error);
         await m.react("❌");
-        
         let errMsg = `❌ *APK Download Failed*\n\n`;
-        if (error.message.includes("No results")) {
-            errMsg += `"${query}" සඳහා Aptoide එකේ ප්‍රතිඵල හමු නොවුණා.\n💡 Try a different name or use package name (e.g., com.whatsapp)`;
+        if (error.message.includes("No apps found")) {
+            errMsg += `No results for "${query}".\nTry using a different name or exact package name.\nExample: ${m.prefix}apk com.whatsapp`;
         } else {
-            errMsg += `📝 Error: ${error.message.substring(0, 100)}`;
+            errMsg += `📝 Error: ${error.message.substring(0, 150)}`;
         }
         await m.reply(errMsg);
     }
