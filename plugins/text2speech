@@ -1,128 +1,69 @@
 const { Sparky, isPublic } = require("../lib");
-const googleTTS = require("google-tts-api");
 const axios = require("axios");
 
-function getArgsText(args, m) {
-    if (Array.isArray(args)) return args.join(" ").trim();
-    if (typeof args === "string") return args.trim();
+const TTS_API = "https://whiteshadow-x-api.onrender.com/api/tools/tts";
+const TTS_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 
-    return (
-        m.quoted?.text ||
-        m.text?.replace(/^[./!#]voiceai\s*/i, "") ||
-        m.body?.replace(/^[./!#]voiceai\s*/i, "") ||
-        ""
-    ).trim();
+function cleanText(text) {
+    return String(text || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 800);
 }
 
-function detectLanguage(text) {
-    if (/[\u0D80-\u0DFF]/.test(text)) return "si";
-    if (/[\u0900-\u097F]/.test(text)) return "hi";
-    if (/[\u0600-\u06FF]/.test(text)) return "ar";
-    return "en";
-}
-
-function parseVoiceArgs(text) {
-    const parts = text.split("|").map((part) => part.trim()).filter(Boolean);
-
-    if (parts.length >= 2) {
-        return {
-            voice: parts[0].toLowerCase(),
-            text: parts.slice(1).join(" | ")
-        };
-    }
-
-    return {
-        voice: "girl",
-        text
-    };
-}
-
-function getTtsOptions(voice, text) {
-    const detectedLang = detectLanguage(text);
-
-    const voices = {
-        girl: { lang: detectedLang === "si" ? "si" : "en", slow: false },
-        cute: { lang: detectedLang === "si" ? "si" : "en", slow: false },
-        woman: { lang: detectedLang === "si" ? "si" : "en", slow: false },
-        sinhala: { lang: "si", slow: false },
-        english: { lang: "en", slow: false },
-        hindi: { lang: "hi", slow: false },
-        slow: { lang: detectedLang, slow: true }
-    };
-
-    return voices[voice] || voices.girl;
-}
-
-async function downloadAudio(url) {
-    const res = await axios.get(url, {
+async function getTtsBuffer(text, lang = "si") {
+    const res = await axios.get(TTS_API, {
         responseType: "arraybuffer",
-        timeout: 20000,
+        timeout: 60000,
+        maxRedirects: 10,
+        params: {
+            text,
+            lang,
+            apitoken: TTS_TOKEN
+        },
         headers: {
             "User-Agent": "Mozilla/5.0"
-        }
+        },
+        validateStatus: (status) => status >= 200 && status < 400
     });
 
-    return Buffer.from(res.data);
-}
+    const buffer = Buffer.from(res.data || []);
+    if (!buffer.length) throw new Error("TTS audio empty una.");
 
-async function createVoice(text, voice) {
-    const options = getTtsOptions(voice, text);
-
-    const url = googleTTS.getAudioUrl(text, {
-        lang: options.lang,
-        slow: options.slow,
-        host: "https://translate.google.com"
-    });
-
-    return await downloadAudio(url);
+    return buffer;
 }
 
 Sparky({
-    name: "voiceai",
-    alias: ["vtts", "girlvoice", "say"],
-    category: "tools",
+    name: "tts",
     fromMe: isPublic,
-    desc: "Text එක voice note එකක් බවට convert කරන්න"
-}, async ({ client, m, args }) => {
+    category: "tools",
+    desc: "Google text to speech Sinhala voice"
+}, async ({ m, client, args }) => {
     try {
-        const input = getArgsText(args, m);
+        const text = cleanText(args || m.quoted?.text);
 
-        if (!input) {
+        if (!text) {
             return await m.reply(
-                "🎙️ Voice එකට හරවන්න text එකක් දෙන්න මචං.\n\n" +
-                "උදා:\n" +
-                ".voiceai ඔයා කොහොමද\n" +
-                ".voiceai girl | Hello baby\n" +
-                ".voiceai sinhala | මම SADEW bot"
+                "Text ekak denna.\n\n" +
+                "Example:\n.tts oyata kohomada machan?"
             );
         }
 
-        const parsed = parseVoiceArgs(input);
-        const text = parsed.text;
-        const voice = parsed.voice;
+        await m.react("🔊");
 
-        if (text.length > 180) {
-            return await m.reply("❌ Text එක දිග වැඩියි මචං. characters 180 ට අඩුවෙන් දෙන්න.");
-        }
-
-        await m.react("🎙️");
-
-        const audioBuffer = await createVoice(text, voice);
+        const audio = await getTtsBuffer(text, "si");
 
         await client.sendMessage(m.jid, {
-            audio: audioBuffer,
+            audio,
             mimetype: "audio/mpeg",
-            ptt: true
+            ptt: false,
+            fileName: "sadew-md-tts.mp3"
         }, { quoted: m });
 
         await m.react("✅");
     } catch (err) {
-        console.log("VoiceAI command error:", err);
+        console.log("TTS error:", err);
         await m.react("❌");
-
-        await m.reply(
-            "❌ Voice note එක හදන්න බැරි වුණා මචං.\n\n" +
-            "හේතුව: " + err.message
-        );
+        await m.reply("TTS error:\n" + (err.message || err));
     }
 });
