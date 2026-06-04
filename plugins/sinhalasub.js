@@ -1,47 +1,100 @@
-const { Sparky } = require("../lib");
+// commands/sinhalasub.js
+const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
-const config = require("../config");
 
-const API_KEY = config.SINHALASUB_API_KEY || "zanta_fCZXpI08BXyizOiRJlDBShW6";
-const API_BASE = "https://api.zanta-mini.store/api/sinhalasub";
+// API Configuration
+const API_KEY = "zan_FIAO7Ayh_eo1vllkep6";
+const API_BASE_URL = "https://api.zanta-mini.store/api/sinhalasub";
 
-Sparky({
-  name: "sinhalasub",
-  category: "download",
-  fromMe: false,
-  desc: "🎬 Search Sinhala movies"
-}, async ({ client, m, args }) => {
-  const query = args.join(" ").trim();
-  if (!query) {
-    return m.reply(`📌 *Usage:* ${m.prefix}sinhalasub movie name\nExample: ${m.prefix}sinhalasub harry potter`);
-  }
-
-  await m.react("⏳");
-  try {
-    // Direct search API call
-    const url = `${API_BASE}/search?apiKey=${API_KEY}&text=${encodeURIComponent(query)}`;
-    console.log("Searching:", url);  // This will appear in your bot logs
-
-    const response = await axios.get(url, { timeout: 15000 });
-    console.log("Response data:", JSON.stringify(response.data).substring(0, 200));
-
-    if (!response.data || !response.data.success || !response.data.results || response.data.results.length === 0) {
-      await m.react("❌");
-      return m.reply(`😞 No results for "${query}".`);
-    }
-
-    let listMsg = `🎬 *Results for "${query}"*\n\n`;
-    response.data.results.slice(0, 8).forEach((movie, i) => {
-      listMsg += `${i+1}. ${movie.title}\n`;
+// Helper function to format the search results
+function formatSearchResults(movies) {
+    let message = "🎬 *සිංහල උපසිරැසි ප්‍රතිඵල*\n\n";
+    movies.forEach((movie, index) => {
+        message += `*${index + 1}. ${movie.title}*\n`;
+        message += `   🔗 URL: ${movie.url}\n\n`;
     });
-    listMsg += `\nUse .sinhalasubdl <number> to get download links. (Coming soon)`;
+    message += "📌 *බාගැනීමට*: `.sdl <URL>`";
+    return message;
+}
 
-    await client.sendMessage(m.jid, { text: listMsg }, { quoted: m });
+// Helper function to format the download results
+function formatDownloadResults(linksData) {
+    let message = "📥 *ඩවුන්ලෝඩ් සබැඳි*\n\n";
+    // Filter for SRT subtitles and video links
+    const subtitles = linksData.find(link => link.quality === "Subtitles");
+    const videoLinks = linksData.filter(link => link.quality !== "Subtitles");
+
+    if (videoLinks.length) {
+        message += "*වීඩියෝ ගොනු:*\n";
+        videoLinks.forEach(link => {
+            message += `   ▶️ ${link.quality} (${link.size})\n`;
+            message += `   🔗 ${link.direct_link}\n\n`;
+        });
+    }
+    if (subtitles) {
+        message += "*උපසිරැසි ගොනු:*\n";
+        message += `   📝 SRT ගොනුව: ${subtitles.direct_link}\n`;
+    }
+    return message;
+}
+
+// Main command
+Sparky({
+    name: "sinhalasub",
+    alias: ["ss"],
+    category: "download",
+    fromMe: isPublic,
+    desc: "Search for Sinhala subtitles (e.g., .ss The Croods)"
+}, async ({ client, m, args }) => {
+    const query = args.join(" ");
+    if (!query) return m.reply("❌ Please provide a movie name. Example: `.ss The Croods`");
+
+    await m.react("🔍");
+    const searchUrl = `${API_BASE_URL}/search?apiKey=${API_KEY}&text=${encodeURIComponent(query)}`;
+
+    try {
+        const response = await axios.get(searchUrl);
+        if (response.data && response.data.success && response.data.results && response.data.results.length) {
+            const results = response.data.results;
+            const searchResultsMessage = formatSearchResults(results);
+            await client.sendMessage(m.jid, { text: searchResultsMessage }, { quoted: m });
+            // Store results in a session for later download
+            global.sinhalaSubResults = results;
+        } else {
+            await m.reply("❌ No results found for your query.");
+        }
+    } catch (error) {
+        console.error(error);
+        await m.reply("❌ An error occurred while searching. Please try again later.");
+    }
     await m.react("✅");
+});
 
-  } catch (error) {
-    console.error("Search error:", error);
-    await m.react("❌");
-    m.reply(`⚠️ Error: ${error.message}`);
-  }
+// Download command
+Sparky({
+    name: "sinhalasubdl",
+    alias: ["sdl"],
+    category: "download",
+    fromMe: isPublic,
+    desc: "Download a movie or subtitle using its URL"
+}, async ({ client, m, args }) => {
+    const movieUrl = args.join(" ");
+    if (!movieUrl) return m.reply("❌ Please provide a valid movie URL. Example: `.sdl https://sinhalasub.lk/movies/...`");
+
+    await m.react("⏳");
+    const downloadUrl = `${API_BASE_URL}/dl?apiKey=${API_KEY}&text=${encodeURIComponent(movieUrl)}`;
+
+    try {
+        const response = await axios.get(downloadUrl);
+        if (response.data && response.data.success && response.data.results && response.data.results.links) {
+            const downloadLinksMessage = formatDownloadResults(response.data.results.links);
+            await client.sendMessage(m.jid, { text: downloadLinksMessage }, { quoted: m });
+        } else {
+            await m.reply("❌ Could not retrieve download links for the provided URL.");
+        }
+    } catch (error) {
+        console.error(error);
+        await m.reply("❌ An error occurred while fetching download links.");
+    }
+    await m.react("✅");
 });
