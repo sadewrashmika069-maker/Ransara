@@ -190,7 +190,7 @@ Sparky({
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-        const menuImageUrl = config.MENU_IMAGE_URL || "https://res.cloudinary.com/dqlh378fb/image/upload/v1779928206/zanta_media_uploads/n6pgdmmiivooq8ylvrao.jpg";
+        const menuImageUrl = config.MENU_IMAGE_URL || "https://res.cloudinary.com/dqlh378fb/image/upload/v1780590033/zanta_media_uploads/dttqjshprca9zvqcpbwg.jpg";
         
         const sentMsg = await client.sendMessage(m.jid, {
             image: { url: menuImageUrl },
