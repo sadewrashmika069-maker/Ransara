@@ -13,7 +13,6 @@ function getQuery(args) {
     return "";
 }
 
-// Global session store for movie data
 if (!global.movieSessions) global.movieSessions = new Map();
 
 Sparky({
@@ -34,7 +33,6 @@ Sparky({
 *Then download:* ${m.prefix}get <1|2>`);
     }
 
-    // If user already has search results and enters a number -> select that movie
     const session = global.movieSessions.get(m.sender);
     if (session && session.step === "awaiting_movie" && !isNaN(query)) {
         const idx = parseInt(query) - 1;
@@ -43,7 +41,8 @@ Sparky({
         }
         const selected = session.results[idx];
         await fetchQualityOptions(client, m, selected.url, selected.title);
-        global.movieSessions.delete(m.sender);
+        // ✅ FIX: Do NOT delete the session here – fetchQualityOptions creates a new one.
+        // global.movieSessions.delete(m.sender);  // ❌ REMOVED
         return;
     }
 
@@ -75,7 +74,7 @@ Sparky({
             results: results,
             timestamp: Date.now()
         });
-        setTimeout(() => global.movieSessions.delete(m.sender), 5 * 60 * 1000); // auto clear after 5 min
+        setTimeout(() => global.movieSessions.delete(m.sender), 5 * 60 * 1000);
 
         await m.react("✅");
     } catch (err) {
@@ -118,6 +117,7 @@ async function fetchQualityOptions(client, m, movieUrl, title) {
 
         await client.sendMessage(m.jid, { text: qualMsg }, { quoted: m });
 
+        // ✅ Store session for .get command (step awaiting_quality)
         global.movieSessions.set(m.sender, {
             step: "awaiting_quality",
             videoLinks: videoLinks,
