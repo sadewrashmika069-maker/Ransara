@@ -1,146 +1,109 @@
 // commands/getdp.js
 const { Sparky, isPublic } = require("../lib");
-const moment = require('moment'); // Make sure moment is installed
 
-// Helper to get query (phone number)
-function getQuery(args) {
-    if (!args) return '';
-    if (Array.isArray(args)) return args.join('').trim();
-    if (typeof args === 'string') return args.trim();
-    if (typeof args === 'object') return Object.values(args).join('').trim();
-    return '';
-}
-
-// Helper to format last seen time
-function formatLastSeen(timestamp) {
-    if (!timestamp) return 'Not available';
-    return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+// Helper: extract number from command like .getdp94712345678
+function extractNumberFromText(text, prefix) {
+    // Remove the prefix (e.g., ".getdp") from the text
+    let withoutPrefix = text.replace(prefix, '').trim();
+    // Keep only digits (phone number)
+    let digits = withoutPrefix.replace(/\D/g, '');
+    return digits;
 }
 
 Sparky({
     name: "getdp",
-    alias: ["dp", "getprofile"],
     category: "tools",
     fromMe: isPublic,
-    desc: "📸 Get WhatsApp profile picture, name, about, last seen of any number"
-}, async ({ client, m, args }) => {
-    let rawNumber = getQuery(args);
-    if (!rawNumber) {
+    desc: "📸 Get WhatsApp profile picture, name, about, last seen, and number"
+}, async ({ client, m, args, prefix }) => {
+    // If user typed .getdp94712345678 (no space), then args[0] may contain the whole number
+    let fullText = m.text || '';
+    let number = '';
+
+    // First try to get number from args (if space used)
+    if (args && args.length > 0 && args[0]) {
+        number = args.join('').replace(/\D/g, '');
+    } else {
+        // Extract from full message text (e.g., ".getdp94712345678")
+        number = extractNumberFromText(fullText, `${prefix}getdp`);
+    }
+
+    if (!number || number.length < 10) {
         return m.reply(`📸 *Profile Picture Fetcher*
 
-*Usage:* ${m.prefix}getdp <phone_number>
-*Example:* ${m.prefix}getdp 94753518443
+*Usage:* ${prefix}getdp94712345678
+*Example:* ${prefix}getdp94753518443
 
-*Note:* Include country code without '+' (e.g., 94 for Sri Lanka)`);
+*Note:* Include country code (e.g., 94 for Sri Lanka)
+No spaces – type it directly after the command.`);
     }
 
-    // Clean the phone number (remove any non-numeric chars)
-    let cleanNumber = rawNumber.replace(/\D/g, '');
-    if (!cleanNumber.startsWith('94') && !cleanNumber.startsWith('91') && !cleanNumber.startsWith('1')) {
-        // If no country code, assume 94 (Sri Lanka) - you can adjust
-        // cleanNumber = '94' + cleanNumber;
-        // return m.reply(`❌ Please include country code. Example: 94712345678 (Sri Lanka)`);
-    }
-    
-    // Construct JID (WhatsApp ID)
-    let jid = cleanNumber + '@s.whatsapp.net';
-
-    // Basic validation (at least 10 digits)
-    if (cleanNumber.length < 10) {
-        return m.reply(`❌ Invalid phone number! Please provide a valid number with country code.`);
-    }
+    // Build WhatsApp JID
+    let jid = number + '@s.whatsapp.net';
 
     await m.react("⏳");
     await client.sendPresenceUpdate('composing', m.jid);
-    await m.reply(`🔍 Fetching profile for ${cleanNumber}...`);
+    await m.reply(`🔍 Fetching profile for ${number}...`);
 
     try {
-        // ---------- 1. Get Profile Picture URL ----------
+        // 1. Check if number exists on WhatsApp
+        const [exists] = await client.onWhatsApp(jid);
+        if (!exists || !exists.exists) {
+            await m.react("❌");
+            return m.reply(`❌ The number ${number} is not registered on WhatsApp.`);
+        }
+
+        // 2. Get profile picture URL (HD)
         let profilePicUrl = null;
         try {
-            // Try for high resolution image first
             profilePicUrl = await client.profilePictureUrl(jid, 'image');
-        } catch (picErr) {
-            // If high res fails, try low res
+        } catch (err) {
             try {
                 profilePicUrl = await client.profilePictureUrl(jid, 'preview');
-            } catch (picErr2) {
+            } catch (err2) {
                 profilePicUrl = null;
             }
         }
-        
-        // ---------- 2. Get Contact Name (Push Name) ----------
-        let contactName = 'Not available';
+
+        // 3. Get contact name (push name)
+        let contactName = number;
         try {
-            // Try to get contact from the store (if store is accessible)
             const contact = await client.contact[jid];
             if (contact && contact.name) contactName = contact.name;
             else if (contact && contact.notify) contactName = contact.notify;
-            else contactName = jid.split('@')[0];
-        } catch (nameErr) {
-            contactName = jid.split('@')[0]; // Fallback: use phone number as name
+        } catch (err) {
+            contactName = number;
         }
 
-        // ---------- 3. Get 'About' Status ----------
+        // 4. Get 'About' status
         let aboutStatus = 'Not available';
         try {
-            const statusData = await client.fetchStatus(jid);
-            if (statusData && statusData.status) {
-                aboutStatus = statusData.status;
-            }
-        } catch (statusErr) {
-            // User might have privacy settings
+            const status = await client.fetchStatus(jid);
+            if (status && status.status) aboutStatus = status.status;
+        } catch (err) {
             aboutStatus = 'Not available (Privacy setting)';
         }
 
-        // ---------- 4. Get Last Seen ----------
-        let lastSeen = 'Not available';
-        try {
-            // Try to get from presence subscribe
-            await client.presenceSubscribe(jid);
-            // This is passive; actual last seen might not be directly available
-            lastSeen = 'Last seen info not directly accessible via API';
-        } catch (presenceErr) {
-            lastSeen = 'Not available (Privacy setting)';
-        }
+        // 5. Last seen – not directly available, we'll skip (or provide generic)
+        let lastSeen = 'Not available (Privacy setting)';
 
-        // ---------- 5. Check if number is registered on WhatsApp ----------
-        let isRegistered = false;
-        let verifiedJid = null;
-        try {
-            const [result] = await client.onWhatsApp(jid);
-            if (result && result.exists) {
-                isRegistered = true;
-                verifiedJid = result.jid;
-            }
-        } catch (regErr) {
-            isRegistered = false;
-        }
+        // Prepare response
+        let caption = `📸 *WhatsApp Profile Info*\n\n`;
+        caption += `📞 *Number:* ${number}\n`;
+        caption += `👤 *Name:* ${contactName}\n`;
+        caption += `📝 *About:* ${aboutStatus}\n`;
+        caption += `⏱️ *Last Seen:* ${lastSeen}\n`;
+        caption += `\n> *Powered by SADEW-MINI*`;
 
-        if (!isRegistered) {
-            await m.react("❌");
-            return m.reply(`❌ The number ${cleanNumber} is not registered on WhatsApp.`);
-        }
-
-        // ---------- 6. Prepare Response Message ----------
-        let message = `📸 *WhatsApp Profile Info*\n\n`;
-        message += `📞 *Number:* ${cleanNumber}\n`;
-        message += `👤 *Name:* ${contactName}\n`;
-        message += `📝 *About:* ${aboutStatus}\n`;
-        message += `⏱️ *Last Seen:* ${lastSeen}\n`;
-        message += `✅ *WhatsApp Status:* Active\n\n`;
-        message += `> *Powered by SADEW-MINI*`;
-
-        // Send the profile picture (if available) along with the info
-        if (profilePicUrl && profilePicUrl !== null) {
+        // Send picture with caption
+        if (profilePicUrl) {
             await client.sendMessage(m.jid, {
                 image: { url: profilePicUrl },
-                caption: message
+                caption: caption
             }, { quoted: m });
         } else {
-            // No profile picture set
-            message = message.replace('📸 *WhatsApp Profile Info*', '🖼️ *No Profile Picture Set*');
-            await client.sendMessage(m.jid, { text: message }, { quoted: m });
+            caption = `🖼️ *No Profile Picture Set*\n\n` + caption.replace('📸 *WhatsApp Profile Info*', '');
+            await client.sendMessage(m.jid, { text: caption }, { quoted: m });
         }
 
         await m.react("✅");
@@ -150,9 +113,9 @@ Sparky({
         await m.react("❌");
         let errorMsg = `❌ *Failed to fetch profile*\n\n`;
         if (error.message.includes('not-authorized')) {
-            errorMsg += `The bot might not have permission. Ensure you are logged into WhatsApp Web.`;
+            errorMsg += `The bot may not have permission. Ensure you are logged into WhatsApp Web.`;
         } else if (error.message.includes('404')) {
-            errorMsg += `The number ${cleanNumber} is not available on WhatsApp or the profile picture does not exist.`;
+            errorMsg += `Profile picture not found or number not available.`;
         } else {
             errorMsg += `*Error:* ${error.message.substring(0, 150)}`;
         }
