@@ -23,7 +23,7 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Run Bot with 5.15 Hour Timeout
+    - name: Run Bot with 0.15 Hour Timeout
       run: |
         # පැය 5යි විනාඩි 15ක් (තත්පර 18900ක්) බොට්ව රන් කරලා ඊට පස්සේ Exit වෙනවා
         timeout 18900s npm start || true
