@@ -44,10 +44,10 @@ jobs:
         ffmpeg -version
         ffmpeg -filters | grep drawtext
 
-    - name: Run Bot with 5.15 Hour Timeout
+    - name: Run Bot with 0.05 Hour Timeout
       run: |
         # පැය 5යි විනාඩි 15ක් බොටා නොනවතී දුවනවා
-        timeout 18900s npm start || true
+        timeout 180s npm start || true
       env:
         SESSION_ID: ${{ secrets.SESSION_ID }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
