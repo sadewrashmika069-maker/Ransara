@@ -1,26 +1,27 @@
 {
-  "name": "X-BOT-MD",
+  "name": "sadew-md",
   "version": "3.7.0",
-  "description": "X-BOT-MD is a powerful WhatsApp Helper Bot packed with features like media handling, automation, and more.",
+  "description": "Sadew MD is a powerful WhatsApp helper bot with media handling, automation, AI, and downloader features.",
   "main": "index.js",
   "scripts": {
-    "start": "pm2 start . --attach --name X-BOT-MD",
-    "stop": "pm2 stop . --attach --name X-BOT-MD"
+    "start": "pm2 start . --attach --name Sadew-MD",
+    "stop": "pm2 stop Sadew-MD",
+    "check": "node --check plugins/video.js && node --check plugins/ts.js"
   },
-  "author": "ASWIN SPARKY",
+  "author": "Sadew Rashmika",
   "license": "ISC",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/A-S-W-I-N-S-P-A-R-K-Y/X--BOT--MD.git"
-  },
   "dependencies": {
+    "@google/generative-ai": "^0.1.3",
     "@viper-x/fancytext": "^1.0.2",
-    "baileys": "latest",
+    "@whiskeysockets/baileys": "latest",
     "axios": "^1.7.9",
+    "baileys": "latest",
     "browser-id3-writer": "^4.4.0",
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.18.2",
+    "ffmpeg-static": "^5.2.0",
+    "figlet": "^1.8.0",
     "file-type": "^16.5.4",
     "fluent-ffmpeg": "^2.1.3",
     "form-data": "^4.0.0",
@@ -28,8 +29,8 @@
     "google-it": "^1.6.4",
     "google-tts-api": "^2.0.2",
     "jimp": "^1.6.1",
-    "node-cron": "^3.0.3",
     "node-cache": "^5.1.2",
+    "node-cron": "^3.0.3",
     "node-fetch": "^2.6.0",
     "node-webpmux": "^3.2.0",
     "pdfkit": "^0.18.0",
@@ -38,14 +39,8 @@
     "pm2": "^5.3.0",
     "qs": "latest",
     "sequelize": "^6.23.0",
+    "sharp": "^0.33.5",
     "simple-git": "^3.27.0",
-    "ffmpeg-static": "^5.2.0",
-    "axios": "^1.7.9",
-    "sharp": "^0.33.5",
-    "pdfkit": "^0.15.0",
-    "sharp": "^0.33.5",
-    "tesseract.js": "^6.0.1",
-    "@google/generative-ai": "^0.1.3",
-    "figlet": "^1.8.0"
+    "tesseract.js": "^6.0.1"
   }
 }
