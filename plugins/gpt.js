@@ -9,7 +9,7 @@ Sparky(
     name: "gpt",
     fromMe: isPublic,
     category: "ai",
-    desc: "Super stable AI chat powered by official Gemini.",
+    desc: "Super stable AI chat powered by official Gemini 1.5 Flash.",
   },
   async ({ m, client, args }) => {
     if (!args || args.trim() === "") {
@@ -32,9 +32,10 @@ Sparky(
     await m.react('🧠');
 
     try {
-      // ✅ මෙතන Class name එක සහ Key එක දෙන විදිහ නිවැරදි කරලා තියෙන්නේ මචං
       const genAI = new GoogleGenerativeAI(aiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      
+      // 🔥 පරණ gemini-pro වෙනුවට සුපිරිම සහ වේගවත් gemini-1.5-flash එක දැම්මා මචං
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       // AI එකෙන් පිළිතුර ලබා ගැනීම
       const result = await model.generateContent(queryText);
@@ -45,7 +46,7 @@ Sparky(
 
       await m.react('💬');
       
-      const captionText = `🤖 *AI ANSWER (GEMINI)*\n\n${replyAnswer}\n\n*POWERED BY SADEW-MD*`;
+      const captionText = `🤖 *AI ANSWER (GEMINI 1.5 FLASH)*\n\n${replyAnswer}\n\n*POWERED BY SADEW-MD*`;
       
       await client.sendMessage(m.jid, { text: captionText }, { quoted: m });
 
