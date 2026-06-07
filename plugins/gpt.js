@@ -1,7 +1,7 @@
 const { Sparky, isPublic } = require("../lib");
-const { GoogleGenAI } = require("@google/generative-ai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// GitHub Secrets වල තියෙන GEMINI_API_KEY එක කෙලින්ම ගන්නවා
+// GitHub Secrets වල තියෙන GEMINI_API_KEY එක ගන්නවා
 const aiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
 
 Sparky(
@@ -20,7 +20,6 @@ Sparky(
       );
     }
 
-    // API Key එක නැත්නම් එරර් එකක් දෙනවා
     if (!aiKey) {
       return await client.sendMessage(
         m.jid,
@@ -33,11 +32,11 @@ Sparky(
     await m.react('🧠');
 
     try {
-      // Official Google AI පද්ධතියට කනෙක්ට් වෙනවා
-      const aiConfig = new GoogleGenAI({ apiKey: aiKey });
-      const model = aiConfig.getGenerativeModel({ model: "gemini-pro" });
+      // ✅ මෙතන Class name එක සහ Key එක දෙන විදිහ නිවැරදි කරලා තියෙන්නේ මචං
+      const genAI = new GoogleGenerativeAI(aiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-      // AI එකෙන් උත්තරේ ඉල්ලනවා
+      // AI එකෙන් පිළිතුර ලබා ගැනීම
       const result = await model.generateContent(queryText);
       const response = await result.response;
       const replyAnswer = response.text();
@@ -46,8 +45,7 @@ Sparky(
 
       await m.react('💬');
       
-      // ChatGPT වගේම පෙනුම තියාගන්න Caption එක මෙහෙම හැදුවා
-      const captionText = `🤖 *AI ANSWER (GEMINI-PRO)*\n\n${replyAnswer}\n\n*POWERED BY SADEW-MD*`;
+      const captionText = `🤖 *AI ANSWER (GEMINI)*\n\n${replyAnswer}\n\n*POWERED BY SADEW-MD*`;
       
       await client.sendMessage(m.jid, { text: captionText }, { quoted: m });
 
