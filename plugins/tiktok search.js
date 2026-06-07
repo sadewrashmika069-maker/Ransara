@@ -1,12 +1,12 @@
 const axios = require("axios");
 const {
   generateWAMessageFromContent,
-  prepareWAMessageMedia,
+  prepareWAMessageMedia, // 👈 මේක Baileys එකෙන් කෙලින්ම එන එකක්
   proto,
 } = require("@whiskeysockets/baileys");
 const { Sparky } = require("../lib");
 
-const MAX_RESULTS = 4; // සර්වර් එකේ ස්පීඩ් එක රැකගන්න 4ක් කලා මචං
+const MAX_RESULTS = 4; 
 const OUTER_HEADER_TITLE = "ＬＯＡＤＩＮＧ．．． ＳＡＤＥＷ  ＭＤ";
 const OUTER_FOOTER_TEXT = "│ ᴘᴏᴡᴇʀᴅ ʙʏ sᴀᴅᴇᴡ-ᴍᴅ";
 const CARD_FOOTER_TEXT = "SADEW LITE BOT";
@@ -39,7 +39,6 @@ async function safeReact(m, emoji) {
   } catch (e) {}
 }
 
-// 🔍 TikWM සර්ච් එකෙන් ඩේටා ගන්නා කොටස
 async function fetchTikWMSearchResults(searchQuery) {
   try {
     console.log(`Searching TikTok via TikWM for: ${searchQuery}`);
@@ -80,7 +79,6 @@ async function fetchTikWMSearchResults(searchQuery) {
   }
 }
 
-// 🎥 වීඩියෝ බෆර් එකක් විදිහට බාගෙන කාඩ්ස් සාදන කොටස (Safe & Bulletproof)
 async function buildCarouselCards(client, videos) {
   const cards = [];
   
@@ -88,7 +86,6 @@ async function buildCarouselCards(client, videos) {
     try {
       console.log(`Downloading video buffer for: ${video.title}`);
       
-      // බ්‍රවුසර් එකක් විදිහට TikWM එකෙන් වීඩියෝ එක බාගන්නවා (Hotlink බ්ලොක් එක කැපේ)
       const videoRes = await axios.get(video.url, {
         responseType: "arraybuffer",
         headers: {
@@ -102,8 +99,8 @@ async function buildCarouselCards(client, videos) {
       let headerConfig;
 
       if (videoRes && videoRes.data) {
-        // වීඩියෝ එක සාර්ථකව බාගත්තා නම් කෙලින්ම වීඩියෝ මැසේජ් එකක් හදනවා
-        media = await client.prepareWAMessageMedia(
+        // ✨ මෙතනින් 'client.' කෑල්ල අයින් කරලා හරියටම හැදුවා මචං
+        media = await prepareWAMessageMedia(
           { video: videoRes.data },
           { upload: client.waUploadToServer }
         );
@@ -113,9 +110,9 @@ async function buildCarouselCards(client, videos) {
           videoMessage: media.videoMessage,
         };
       } else {
-        // මොකක් හරි හේතුවකින් වීඩියෝ එක බාන්න බැරි වුණොත්, ඉමේජ් එකක් විදිහට කාඩ් එක හදනවා (Fallback)
         console.log(`Video buffer failed, falling back to thumbnail for: ${video.title}`);
-        media = await client.prepareWAMessageMedia(
+        // ✨ මෙතනත් 'client.' කෑල්ල අයින් කලා
+        media = await prepareWAMessageMedia(
           { image: { url: video.thumbnail } },
           { upload: client.waUploadToServer }
         );
@@ -171,16 +168,13 @@ Sparky(
     try {
       await safeReact(m, "📥");
 
-      // 1. TikWM සර්ච් ඩේටා ගැනීම
       const videos = await fetchTikWMSearchResults(searchQuery);
       const jid = getJid(m);
       
-      // 2. බෆර් ක්‍රමයට කාඩ්ස් සෑදීම
       const cards = await buildCarouselCards(client, videos);
 
       if (!cards.length) throw new Error("Could not process any video or image cards");
 
-      // 3. මැසේජ් එක ව්‍යුහගත කිරීම
       const interactiveMessage = proto.Message.InteractiveMessage.fromObject({
         header: proto.Message.InteractiveMessage.Header.fromObject({
           title: OUTER_HEADER_TITLE,
@@ -214,7 +208,6 @@ Sparky(
         { quoted: m }
       );
 
-      // 4. යැවීම
       await client.relayMessage(jid, message.message, { messageId: message.key.id });
       await safeReact(m, "⚡");
 
