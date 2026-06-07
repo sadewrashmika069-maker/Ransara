@@ -1,12 +1,15 @@
 const { Sparky, isPublic } = require("../lib");
-const axios = require("axios");
+const { GoogleGenAI } = require("@google/generative-ai");
+
+// GitHub Secrets වල තියෙන GEMINI_API_KEY එක කෙලින්ම ගන්නවා
+const aiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
 
 Sparky(
   {
     name: "gpt",
     fromMe: isPublic,
     category: "ai",
-    desc: "Chat with ChatGPT (Alternative Stable API).",
+    desc: "Super stable AI chat powered by official Gemini.",
   },
   async ({ m, client, args }) => {
     if (!args || args.trim() === "") {
@@ -17,38 +20,45 @@ Sparky(
       );
     }
 
+    // API Key එක නැත්නම් එරර් එකක් දෙනවා
+    if (!aiKey) {
+      return await client.sendMessage(
+        m.jid,
+        { text: "❌ *Error:* `GEMINI_API_KEY` එක GitHub Secrets වල සෙට් කරලා නැහැ මචං!" },
+        { quoted: m }
+      );
+    }
+
     const queryText = args.trim();
     await m.react('🧠');
 
     try {
-      // 🔥 මෙන්න මම API එක වෙනස් කරලා අලුත්, ස්ථාවර සර්වර් එකක් දැම්මා මචං
-      const apiUrl = `https://api.shimonmod.xyz/api/chatgpt?q=${encodeURIComponent(queryText)}`;
-      
-      const response = await axios.get(apiUrl, { timeout: 15000 });
-      const data = response.data;
+      // Official Google AI පද්ධතියට කනෙක්ට් වෙනවා
+      const aiConfig = new GoogleGenAI({ apiKey: aiKey });
+      const model = aiConfig.getGenerativeModel({ model: "gemini-pro" });
 
-      // API එකෙන් එන response එක අනුව data.result හෝ data.reply චෙක් කරනවා
-      const replyAnswer = data.result || data.reply || data.answer;
+      // AI එකෙන් උත්තරේ ඉල්ලනවා
+      const result = await model.generateContent(queryText);
+      const response = await result.response;
+      const replyAnswer = response.text();
 
-      if (!replyAnswer) {
-        throw new Error("ChatGPT සර්වර් එකෙන් නිසි ප්‍රතිචාරයක් ලැබුණේ නැත.");
-      }
+      if (!replyAnswer) throw new Error("AI එකෙන් නිසි ප්‍රතිචාරයක් ලැබුණේ නැත.");
 
       await m.react('💬');
       
-      const captionText = `🤖 *CHAT-GPT ANSWER*\n\n${replyAnswer}\n\n*POWERED BY SADEW-MD*`;
+      // ChatGPT වගේම පෙනුම තියාගන්න Caption එක මෙහෙම හැදුවා
+      const captionText = `🤖 *AI ANSWER (GEMINI-PRO)*\n\n${replyAnswer}\n\n*POWERED BY SADEW-MD*`;
       
       await client.sendMessage(m.jid, { text: captionText }, { quoted: m });
 
     } catch (error) {
       await m.react('❌');
-      console.error("ChatGPT Error:", error);
-      
-      let errorMsg = error.message.includes("timeout")
-        ? "❌ *Timeout:* සර්වර් එකෙන් උත්තරයක් දෙන්න ප්‍රමාද වැඩියි."
-        : `❌ *Error:* ${error.message}`;
-        
-      await client.sendMessage(m.jid, { text: errorMsg }, { quoted: m });
+      console.error("Gemini Error:", error);
+      await client.sendMessage(
+        m.jid, 
+        { text: `❌ *AI Error:* ${error.message}` }, 
+        { quoted: m }
+      );
     }
   }
 );
