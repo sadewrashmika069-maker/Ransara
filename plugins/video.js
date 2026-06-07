@@ -12,12 +12,15 @@ const API_TOKEN =
   process.env.YOUTUBE_API_TOKEN ||
   process.env.YT_API_TOKEN ||
   "VK4fry";
-const VIDEO_QUALITY = process.env.YT_VIDEO_QUALITY || "1080";
-const MAX_VIDEO_MB = Number(process.env.MAX_VIDEO_MB || 200);
+const VIDEO_QUALITY = process.env.YT_VIDEO_QUALITY || "720";
+const MAX_VIDEO_MB = Number(process.env.MAX_VIDEO_MB || 120);
 const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
-const FFMPEG_CRF = process.env.YT_FFMPEG_CRF || "18";
-const FFMPEG_PRESET = process.env.YT_FFMPEG_PRESET || "veryfast";
-const SEND_AS_DOCUMENT = process.env.YT_SEND_AS_DOCUMENT !== "false";
+const FFMPEG_CRF = process.env.YT_FFMPEG_CRF || "20";
+const FFMPEG_PRESET = process.env.YT_FFMPEG_PRESET || "ultrafast";
+const FFMPEG_MAX_HEIGHT = process.env.YT_FFMPEG_MAX_HEIGHT || "720";
+const FFMPEG_MAXRATE = process.env.YT_FFMPEG_MAXRATE || "3500k";
+const FFMPEG_BUFSIZE = process.env.YT_FFMPEG_BUFSIZE || "7000k";
+const FFMPEG_AUDIO_BITRATE = process.env.YT_FFMPEG_AUDIO_BITRATE || "160k";
 
 const AXIOS_JSON_CONFIG = {
   timeout: 60000,
@@ -271,18 +274,22 @@ async function makePhoneCompatibleMp4(inputBuffer) {
       FFMPEG_PRESET,
       "-crf",
       FFMPEG_CRF,
+      "-maxrate",
+      FFMPEG_MAXRATE,
+      "-bufsize",
+      FFMPEG_BUFSIZE,
       "-pix_fmt",
       "yuv420p",
       "-vf",
-      "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+      `scale=-2:min(${FFMPEG_MAX_HEIGHT}\\,ih),fps=30,format=yuv420p`,
       "-profile:v",
-      "high",
+      "main",
       "-level",
-      "4.2",
+      "3.1",
       "-c:a",
       "aac",
       "-b:a",
-      "192k",
+      FFMPEG_AUDIO_BITRATE,
       "-movflags",
       "+faststart",
       "-max_muxing_queue_size",
@@ -313,19 +320,14 @@ async function sendText(m, client, text) {
 
 async function sendVideo(m, client, buffer, caption, fileName) {
   const jid = getJid(m);
-  const payload = SEND_AS_DOCUMENT
-    ? {
-        document: buffer,
-        mimetype: "video/mp4",
-        fileName,
-        caption,
-      }
-    : {
-        video: buffer,
-        mimetype: "video/mp4",
-        caption,
-        fileName,
-      };
+  const payload = {
+    video: buffer,
+    mimetype: "video/mp4",
+    caption,
+    fileName,
+    gifPlayback: false,
+    ptv: false,
+  };
 
   if (typeof client?.sendMessage === "function") {
     return client.sendMessage(jid, payload, { quoted: m });
@@ -392,7 +394,7 @@ Sparky(
     name: "video",
     fromMe: false,
     category: "downloader",
-    desc: "Download YouTube video in 1080p. Use .video <link or search text>",
+    desc: "Download YouTube video in phone supported HD MP4. Use .video <link or search text>",
   },
   async ({ m, client, args }) => {
     const input = getInputText(args, m);
@@ -420,7 +422,7 @@ Sparky(
         duration = result.duration || "";
       }
 
-      await sendText(m, client, `1080p video eka download karanawa...\n${title}`);
+      await sendText(m, client, `HD video eka download karanawa...\n${title}`);
 
       const downloadInfo = await getDownloadInfo(videoUrl);
       if (downloadInfo.title) title = downloadInfo.title;
@@ -433,7 +435,7 @@ Sparky(
       await sendText(
         m,
         client,
-        "Phone ekata support wena MP4 format ekata convert karanawa..."
+        "Phone support HD MP4 format ekata hadanawa..."
       );
 
       const compatibleBuffer = await makePhoneCompatibleMp4(downloadedBuffer);
@@ -455,8 +457,10 @@ Sparky(
         `Title: ${title}`,
         channel ? `Channel: ${channel}` : "",
         duration ? `Duration: ${duration}` : "",
-        `Quality: ${VIDEO_QUALITY}p`,
+        `Quality: HD ${VIDEO_QUALITY}p`,
         "Format: MP4 / H.264 / AAC",
+        "",
+        "Powered by Sadew Rashmika",
       ]
         .filter(Boolean)
         .join("\n");
