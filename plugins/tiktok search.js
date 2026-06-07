@@ -6,14 +6,13 @@ const {
 } = require("@whiskeysockets/baileys");
 const { Sparky } = require("../lib");
 
-// 🌐 ⚠️ යාළුවාගෙන් හරිම URL එක ඉල්ලගෙන මෙතනට දාපන් මචං. දැනට 404 එන්නේ මේක වැරදි හින්දා!
-const API_TOKEN = "VK4fry";
-const API_URL = "https://whiteshadow-x-api.onrender.com/api/search/tiktok"; 
+// 🌐 කාගෙන්වත් හිඟාකන්න ඕන නැති පොදු නිදහස් API එකක් අපි දැම්මා!
+const API_URL = "https://itzpire.com/search/tiktok"; 
 
 const MAX_RESULTS = 6;
-const OUTER_HEADER_TITLE = "ＬＯＡＤＩＮＧ．．． ＷＨＩＴＥＳＨＡＤＯＷ";
-const OUTER_FOOTER_TEXT = "│ ᴘᴏᴡᴇʀᴅ ʙʏ ᴡcontentʜɪᴛᴇsʜᴀᴏᴡ-ᴍᴅ";
-const CARD_FOOTER_TEXT = "WHITESHADOW LITE BOT";
+const OUTER_HEADER_TITLE = "ＬＯＡＤＩＮＧ．．． ＳＡＤＥＷ  ＭＤ";
+const OUTER_FOOTER_TEXT = "│ ᴘᴏᴡᴇʀᴅ ʙʏ sᴀᴅᴇᴡ-ᴍᴅ";
+const CARD_FOOTER_TEXT = "SADEW LITE BOT";
 
 function getJid(m) {
   return m.jid || m.chat || m.from || m.key?.remoteJid;
@@ -33,9 +32,9 @@ function truncateText(value, maxLength) {
 
 function pickResultsArray(payload) {
   if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.results)) return payload.results;
   if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.data?.results)) return payload.data.results;
+  if (Array.isArray(payload?.results)) return payload.results;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
   if (Array.isArray(payload?.result)) return payload.result;
   return [];
 }
@@ -58,33 +57,23 @@ function normalizeVideo(rawVideo, index) {
     rawVideo.title,
     rawVideo.caption,
     rawVideo.desc,
-    rawVideo.description,
-    rawVideo.text,
     `TikTok Result ${index + 1}`
   );
   const body = pickFirstString(
-    rawVideo.caption,
-    rawVideo.desc,
-    rawVideo.description,
-    rawVideo.hashtags,
-    rawVideo.title,
+    rawVideo.author?.nickname,
+    rawVideo.author,
     "TikTok video result"
   );
   const thumbnail = pickFirstString(
-    rawVideo.thumbnail,
     rawVideo.cover,
-    rawVideo.dynamic_cover,
-    rawVideo.origin_cover,
-    rawVideo.image,
-    rawVideo.thumb
+    rawVideo.thumbnail,
+    rawVideo.dynamic_cover
   );
   const url = pickFirstString(
+    rawVideo.video,
     rawVideo.url,
     rawVideo.link,
-    rawVideo.share_url,
-    rawVideo.video_url,
-    rawVideo.play,
-    rawVideo.play_url
+    rawVideo.nowm
   );
 
   return {
@@ -116,14 +105,13 @@ async function sendText(m, client, text) {
 }
 
 async function fetchTikTokResults(searchQuery) {
-  const endpoint = `${API_URL}?query=${encodeURIComponent(
-    searchQuery
-  )}&apitoken=${API_TOKEN}`;
+  // ටෝකන් නැතිව කෙලින්ම සර්ච් කරන ලින්ක් එක
+  const endpoint = `${API_URL}?query=${encodeURIComponent(searchQuery)}`;
   const { data } = await axios.get(endpoint, { timeout: 15000 });
 
   const results = pickResultsArray(data)
     .map(normalizeVideo)
-    .filter((video) => video.url)
+    .filter((video) => video.url && video.thumbnail)
     .slice(0, MAX_RESULTS);
 
   if (!results.length) throw new Error("No TikTok results found");
@@ -153,38 +141,41 @@ async function buildCarouselCards(client, videos) {
   const cards = [];
 
   for (const video of videos) {
-    const media = await prepareImageHeader(client, video.thumbnail);
+    try {
+      const media = await prepareImageHeader(client, video.thumbnail);
 
-    cards.push(
-      // ✅ FIX: Changed from proto.Message.InteractiveMessage.Card to proto.Message.CarouselMessage.Card
-      createProto(proto.Message.CarouselMessage.Card, {
-        header: createProto(proto.Message.InteractiveMessage.Header, {
-          title: truncateText(video.title, 30),
-          hasMediaAttachment: true,
-          imageMessage: media.imageMessage,
-        }),
-        body: createProto(proto.Message.InteractiveMessage.Body, {
-          text: truncateText(video.body, 60),
-        }),
-        footer: createProto(proto.Message.InteractiveMessage.Footer, {
-          text: CARD_FOOTER_TEXT,
-        }),
-        nativeFlowMessage: createProto(
-          proto.Message.InteractiveMessage.NativeFlowMessage,
-          {
-            buttons: [
-              {
-                name: "quick_reply",
-                buttonParamsJson: JSON.stringify({
-                  display_text: "📥 Download Video",
-                  id: `.tiktok ${video.url}`,
-                }),
-              },
-            ],
-          }
-        ),
-      })
-    );
+      cards.push(
+        createProto(proto.Message.CarouselMessage.Card, {
+          header: createProto(proto.Message.InteractiveMessage.Header, {
+            title: truncateText(video.title, 30),
+            hasMediaAttachment: true,
+            imageMessage: media.imageMessage,
+          }),
+          body: createProto(proto.Message.InteractiveMessage.Body, {
+            text: truncateText(video.body, 60),
+          }),
+          footer: createProto(proto.Message.InteractiveMessage.Footer, {
+            text: CARD_FOOTER_TEXT,
+          }),
+          nativeFlowMessage: createProto(
+            proto.Message.InteractiveMessage.NativeFlowMessage,
+            {
+              buttons: [
+                {
+                  name: "quick_reply",
+                  buttonParamsJson: JSON.stringify({
+                    display_text: "📥 Download Video",
+                    id: `.tiktok ${video.url}`,
+                  }),
+                },
+              ],
+            }
+          ),
+        })
+      );
+    } catch (e) {
+      console.error("Error building card for video:", video.title, e.message);
+    }
   }
 
   return cards;
@@ -193,6 +184,8 @@ async function buildCarouselCards(client, videos) {
 async function sendCarousel(m, client, searchQuery, videos) {
   const jid = getJid(m);
   const cards = await buildCarouselCards(client, videos);
+
+  if (!cards.length) throw new Error("Could not build any carousel cards");
 
   const interactiveMessage = createProto(proto.Message.InteractiveMessage, {
     header: createProto(proto.Message.InteractiveMessage.Header, {
@@ -205,7 +198,6 @@ async function sendCarousel(m, client, searchQuery, videos) {
     footer: createProto(proto.Message.InteractiveMessage.Footer, {
       text: OUTER_FOOTER_TEXT,
     }),
-    // ✅ FIX: Changed from proto.Message.InteractiveMessage.CarouselMessage to proto.Message.CarouselMessage
     carouselMessage: createProto(proto.Message.CarouselMessage, {
       cards,
       messageVersion: 1,
@@ -253,8 +245,8 @@ Sparky(
     name: "ts",
     fromMe: false,
     category: "search",
-    desc: "Search TikTok videos and display in a beautiful carousel grid.",
-    description: "Search TikTok videos and display in a beautiful carousel grid.",
+    desc: "Search TikTok videos independently without gatekeeping APIs.",
+    description: "Search TikTok videos independently without gatekeeping APIs.",
   },
   async ({ m, client, args }) => {
     const searchQuery = getSearchQuery(args);
@@ -271,7 +263,7 @@ Sparky(
       try {
         await sendCarousel(m, client, searchQuery, videos);
       } catch (carouselError) {
-        console.error("ts command carousel build/send error:", carouselError);
+        console.error("ts command carousel build/send error, running fallback:", carouselError.message);
         await sendFallbackList(m, client, searchQuery, videos);
       }
 
