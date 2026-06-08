@@ -1,138 +1,148 @@
-// commands/gemini.js
-const { Sparky, isPublic } = require("../lib");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const config = require("../config");
+const axios = require("axios");
+const { Sparky } = require("../lib");
 
-// Gemini AI initialization
-const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const API_URL = "https://whiteshadow-x-api.onrender.com/api/ai/gemini";
+const API_TOKEN =
+  process.env.WHITESHADOW_API_TOKEN ||
+  process.env.GEMINI_API_TOKEN ||
+  process.env.GEMINI_TOKEN ||
+  "VK4fry";
+const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 30000);
 
-// එක් එක් user ගේ chat history තියාගන්න Map එකක්
-const userHistory = new Map();
+const EMOJI_THINKING = "\uD83E\uDD16";
+const EMOJI_DONE = "\u2705";
+const EMOJI_ERROR = "\u274C";
 
-// ========== args එක හරියට handle කරන function එක ==========
-function getArgs(args) {
-    // args array එකක් නම්
-    if (args && Array.isArray(args)) {
-        return args.join(" ").trim();
-    }
-    // args string එකක් නම්
-    if (args && typeof args === 'string') {
-        return args.trim();
-    }
-    // args object එකක් නම් (උදා: {0: "hello"})
-    if (args && typeof args === 'object') {
-        return Object.values(args).join(" ").trim();
-    }
-    // එකක් නැත්නම්
-    return "";
+const STYLE_INSTRUCTION =
+  "Reply in a natural Sinhala and English mixed style. Do not reply in full Sinhala only. Use friendly clear Sinhala-English mix like a Sri Lankan WhatsApp chat.";
+
+function getJid(m) {
+  return m.jid || m.chat || m.from || m.key?.remoteJid;
 }
 
-Sparky({
+function getPrompt(args, m) {
+  if (Array.isArray(args) && args.length) return args.join(" ").trim();
+  if (typeof args === "string" && args.trim()) return args.trim();
+  if (m?.quoted?.text) return m.quoted.text.trim();
+  if (m?.text) return m.text.replace(/^[./!#]gemini\s*/i, "").trim();
+  return "";
+}
+
+function extractTextFromObject(value, depth = 0) {
+  if (!value || depth > 4) return "";
+
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractTextFromObject(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof value !== "object") return "";
+
+  const priorityKeys = [
+    "result",
+    "response",
+    "answer",
+    "message",
+    "text",
+    "content",
+    "reply",
+    "output",
+    "data",
+  ];
+
+  for (const key of priorityKeys) {
+    const found = extractTextFromObject(value[key], depth + 1);
+    if (found) return found;
+  }
+
+  for (const item of Object.values(value)) {
+    const found = extractTextFromObject(item, depth + 1);
+    if (found) return found;
+  }
+
+  return "";
+}
+
+async function safeReact(m, emoji) {
+  try {
+    await m.react?.(emoji);
+  } catch (error) {
+    console.error("gemini command react error:", error);
+  }
+}
+
+async function sendText(m, client, text) {
+  const jid = getJid(m);
+
+  if (typeof m.reply === "function") return m.reply(text);
+  if (typeof m.sendMsg === "function") return m.sendMsg(jid, text, { quoted: m });
+  if (typeof client?.sendMessage === "function") {
+    return client.sendMessage(jid, { text }, { quoted: m });
+  }
+
+  throw new Error("No supported text send method found");
+}
+
+async function askGemini(prompt) {
+  const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
+  const { data } = await axios.get(API_URL, {
+    timeout: REQUEST_TIMEOUT_MS,
+    params: {
+      q,
+      apitoken: API_TOKEN,
+    },
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36",
+    },
+  });
+
+  const answer = extractTextFromObject(data);
+  if (!answer) throw new Error("Gemini API response eke answer eka empty.");
+
+  return answer;
+}
+
+Sparky(
+  {
     name: "gemini",
+    fromMe: false,
     category: "ai",
-    fromMe: isPublic,
-    desc: "🤖 Gemini AI සමඟ කතා කරන්න"
-}, async ({ client, m, args }) => {
-    try {
-        // ========== FIX: args එක හරියට ගන්න ==========
-        let userMessage = getArgs(args);
-        
-        // message එකක් නැත්නම්
-        if (!userMessage || userMessage === "") {
-            return m.reply(`🤖 *Gemini AI Assistant*
+    desc: "Chat with Gemini AI in Sinhala-English mixed style.",
+    description: "Chat with Gemini AI in Sinhala-English mixed style.",
+  },
+  async ({ m, client, args }) => {
+    const prompt = getPrompt(args, m);
 
-💡 *භාවිතය:*
-${m.prefix}gemini [ඔයාගේ ප්‍රශ්නය]
-
-📝 *උදාහරණ:*
-${m.prefix}gemini කොහොමද ඔයා?
-${m.prefix}gemini කවියක් කියන්න
-${m.prefix}gemini හේතුව මොකක්ද?
-
-🔄 *History reset:*
-${m.prefix}resetgemini`);
-        }
-        
-        // API key එක check කරන්න
-        if (!config.GEMINI_API_KEY || config.GEMINI_API_KEY === "") {
-            return m.reply("❌ Gemini API key එක සකසා නැත!\n\nකරුණාකර config.js එකට API key එක add කරන්න.");
-        }
-        
-        // Typing indicator එක
-        await client.sendPresenceUpdate('composing', m.jid);
-        
-        // user ගේ පැරණි chat history එක ගන්න
-        let history = userHistory.get(m.sender) || [];
-        
-        // නව message එක history එකට add කරන්න
-        history.push({ role: "user", parts: [{ text: userMessage }] });
-        
-        // history එක වැඩි උනොත් පරණ ඒවා අයින් කරන්න (අන්තිම 10)
-        if (history.length > 10) {
-            history = history.slice(-10);
-        }
-        
-        // Chat session එක start කරන්න
-        const chat = model.startChat({
-            history: history.slice(0, -1),
-            generationConfig: {
-                maxOutputTokens: 1000,
-                temperature: 0.7,
-                topP: 0.95,
-                topK: 40,
-            },
-        });
-        
-        // Reply එක generate කරන්න
-        const result = await chat.sendMessage(userMessage);
-        const reply = result.response.text();
-        
-        // Reply එකත් history එකට add කරන්න
-        history.push({ role: "model", parts: [{ text: reply }] });
-        userHistory.set(m.sender, history);
-        
-        // Reply එක send කරන්න
-        let finalReply = `🤖 *Gemini AI*
-━━━━━━━━━━━━━━━━━━━━
-${reply}
-━━━━━━━━━━━━━━━━━━━━
-💡 *Tip:* ${m.prefix}resetgemini - history එක reset කරන්න`;
-        
-        await m.reply(finalReply);
-        
-    } catch (error) {
-        console.error("Gemini command error:", error);
-        
-        // Error එක handle කරන්න
-        if (error.message && error.message.includes("API key")) {
-            m.reply("❌ API key එක වලංගු නැහැ! කරුණාකර නිවැරදි API key එකක් config එකට දාන්න.");
-        } else if (error.message && error.message.includes("rate limit")) {
-            m.reply("⏰ විනාඩියකට requests ගාන ඉක්මවා ගියා. ටික වෙලාවකින් නැවත උත්සාහ කරන්න.");
-        } else if (error.message && error.message.includes("safety")) {
-            m.reply("⚠️ සමාවන්න, ආරක්ෂක හේතූන් මත මම ඒ ප්‍රශ්නයට පිළිතුරු දෙන්නේ නැහැ.");
-        } else {
-            m.reply(`❌ සමාවන්න, යම් දෝෂයක් සිදු විය.\n📝 *Error:* ${error.message ? error.message.substring(0, 100) : "Unknown error"}`);
-        }
+    if (!prompt) {
+      return sendText(
+        m,
+        client,
+        `${EMOJI_ERROR} *Usage:* \`.gemini oyage question eka\`\n\nExample: .gemini Write a poem about nature`
+      );
     }
-});
 
-// ========== Reset command එක ==========
-Sparky({
-    name: "resetgemini",
-    category: "ai",
-    fromMe: isPublic,
-    desc: "🔄 ඔයාගේ Gemini chat history එක reset කරන්න"
-}, async ({ client, m }) => {
     try {
-        userHistory.delete(m.sender);
-        await m.reply(`✅ *Success!*
+      await safeReact(m, EMOJI_THINKING);
 
-ඔයාගේ Gemini AI chat history එක සාර්ථකව මකා දමන ලදි!
+      const answer = await askGemini(prompt);
+      await sendText(m, client, answer);
 
-💡 දැන් නව සංවාදයක් ආරම්භ කරන්න: \`${m.prefix}gemini හේතුව මොකක්ද\``);
+      await safeReact(m, EMOJI_DONE);
     } catch (error) {
-        console.error("Reset error:", error);
-        m.reply("❌ Reset කරන්න බැරි වුණා. නැවත උත්සාහ කරන්න.");
+      console.error("gemini command error:", error);
+      await safeReact(m, EMOJI_ERROR);
+
+      return sendText(
+        m,
+        client,
+        `${EMOJI_ERROR} Gemini AI reply eka ganna bari una.\nReason: ${
+          error?.response?.data?.message || error.message || "Unknown Error"
+        }`
+      );
     }
-});
+  }
+);
