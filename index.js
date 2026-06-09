@@ -287,21 +287,7 @@ async function dispatchCommands(client, m) {
         prefix,
         command: commandName,
       });
-    } catch (error) {
-      console.error("Command error:", error);
-      try {
-        await sendText(
-          client,
-          getChatId(m),
-          "Command eka run karanna bari una. Aye try karanna.",
-          m
-        );
-      } catch {}
-    }
-  }
-}
-
-function loadLocalPlugins() {
+   function loadLocalPlugins() {
   for (const pluginDir of PLUGIN_DIRS) {
     if (!fs.existsSync(pluginDir)) continue;
 
