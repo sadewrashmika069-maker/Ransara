@@ -28,7 +28,7 @@ Sparky({
             messages: [
                 { 
                     role: "system", 
-                    content: "You are a helpful AI assistant. You must always reply in clear, natural Sinhala language, no matter what language the user asks the question in." 
+                    content: "You are a helpful AI assistant.Reply in a natural Sinhala and English mixed style.nutural sinhala kind friendly sinhala latters.don'tUse singlish.use friendly clear Sinhala-English mix like a Sri Lankan WhatsApp chat." 
                 },
                 { 
                     role: "user", 
