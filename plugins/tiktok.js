@@ -6,6 +6,7 @@ const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
+// Whiteshadow API Config (Keeping old variable names to avoid 'not defined' errors)
 const ZANTA_API_KEY = process.env.WHITESHADOW_API_KEY || "VK4fry";
 const ZANTA_API_URL = "https://whiteshadow-x-api.onrender.com/api/download/tiktok";
 
@@ -138,7 +139,7 @@ Sparky(
     alias: ["tiktok", "tiktokdl", "timg", "ttimg", "slideshow", "ttphoto"],
     fromMe: isPublic,
     category: "downloader",
-    desc: "Download TikTok videos using Zanta API.",
+    desc: "Download TikTok videos using WhiteShadow API.",
   },
   async ({ m, client, args }) => {
     const text = Array.isArray(args) ? args.join(" ") : String(args || "");
@@ -155,26 +156,26 @@ Sparky(
     await react(m, "⏳");
 
     try {
-      const response = await axios.get(ZANTA_API_URL, {
-        httpsAgent,
-        timeout: 20000,
-        params: {
-          apiKey: ZANTA_API_KEY,
-          url: tiktokUrl,
-        },
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36",
-          Accept: "application/json, text/plain, */*",
-        },
-      });
+      // Fixed API Request to prevent double-encoding and pass the proper query parameters
+      const response = await axios.get(
+        `${ZANTA_API_URL}?url=${encodeURIComponent(tiktokUrl)}&apitoken=${ZANTA_API_KEY}`,
+        {
+          httpsAgent,
+          timeout: 20000,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36",
+            Accept: "application/json, text/plain, */*",
+          },
+        }
+      );
 
       const apiData = response.data;
       const videoUrl = findVideoUrl(apiData);
 
       if (!videoUrl) {
-        console.log("Zanta TikTok API response:", JSON.stringify(apiData).slice(0, 1500));
-        throw new Error("No video URL found from Zanta API.");
+        console.log("WhiteShadow TikTok API response:", JSON.stringify(apiData).slice(0, 1500));
+        throw new Error("No video URL found from WhiteShadow API.");
       }
 
       const title = findTitle(apiData);
