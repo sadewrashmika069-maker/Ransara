@@ -1,58 +1,20 @@
 const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
+const https = require("https");
 
-const http = axios.create({
-  timeout: 20000,
-  maxContentLength: Infinity,
-  maxBodyLength: Infinity,
-  headers: {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-    Accept: "application/json, text/plain, */*",
-  },
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
 });
 
-const APIS = [
-  {
-    name: "TikWM",
-    url: (link) => `https://www.tikwm.com/api/?url=${encodeURIComponent(link)}`,
-    parser: parseTikwm,
-  },
-  {
-    name: "TiklyDown",
-    url: (link) => `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(link)}`,
-    parser: parseGeneric,
-  },
-  {
-    name: "Ryzen",
-    url: (link) => `https://api.ryzendesu.vip/api/downloader/ttdl?url=${encodeURIComponent(link)}`,
-    parser: parseGeneric,
-  },
-  {
-    name: "Delirius",
-    url: (link) => `https://delirius-apiofc.vercel.app/download/tiktok?url=${encodeURIComponent(link)}`,
-    parser: parseGeneric,
-  },
-];
+const ZANTA_API_KEY = process.env.ZANTA_API_KEY || "zan_FIAO7Ayh_eo1vllkep6";
+const ZANTA_API_URL = "https://api.zanta-mini.store/api/tiktok";
 
 function extractTikTokUrl(text) {
-  const match = String(text || "").match(/https?:\/\/(?:www\.|vm\.|vt\.)?tiktok\.com\/\S+/i);
-  return match ? match[0].replace(/[)>.,]+$/g, "") : "";
-}
+  const match = String(text || "").match(/https?:\/\/[^\s]+/i);
+  if (!match) return "";
 
-function isHttpUrl(value) {
-  return /^https?:\/\//i.test(String(value || ""));
-}
-
-function normalizeMediaUrl(url) {
-  if (!url) return "";
-  if (url.startsWith("//")) return `https:${url}`;
-  if (url.startsWith("/")) return `https://www.tikwm.com${url}`;
-  return url;
-}
-
-function unique(items) {
-  return [...new Set(items.filter(Boolean))];
+  const url = match[0].replace(/[)>.,]+$/g, "");
+  return /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com)/i.test(url) ? url : "";
 }
 
 function getValueByPath(obj, path) {
@@ -62,319 +24,219 @@ function getValueByPath(obj, path) {
   }, obj);
 }
 
-function collectUrlsDeep(value, keyHint = "", bucket = { videos: [], images: [] }) {
-  if (!value) return bucket;
+function findFirstUrlDeep(value, keyHint = "") {
+  if (!value) return "";
 
   if (typeof value === "string") {
-    const url = normalizeMediaUrl(value);
-    if (!isHttpUrl(url)) return bucket;
-
-    const lowerUrl = url.toLowerCase();
+    const text = value.trim();
+    const lowerText = text.toLowerCase();
     const lowerKey = String(keyHint || "").toLowerCase();
 
-    const looksLikeVideo =
-      lowerUrl.includes(".mp4") ||
+    const isUrl = /^https?:\/\//i.test(text);
+    const isVideo =
+      lowerText.includes(".mp4") ||
+      lowerKey.includes("hd") ||
       lowerKey.includes("play") ||
       lowerKey.includes("nowm") ||
       lowerKey.includes("no_watermark") ||
-      lowerKey.includes("withoutwatermark") ||
-      lowerKey.includes("video");
+      lowerKey.includes("video") ||
+      lowerKey.includes("download");
 
-    const looksLikeImage =
-      lowerUrl.includes(".jpg") ||
-      lowerUrl.includes(".jpeg") ||
-      lowerUrl.includes(".png") ||
-      lowerUrl.includes(".webp") ||
-      lowerKey.includes("image") ||
-      lowerKey.includes("photo");
-
-    const isThumbnail =
-      lowerKey.includes("avatar") ||
-      lowerKey.includes("cover") ||
-      lowerKey.includes("thumb") ||
-      lowerKey.includes("music");
-
-    if (looksLikeVideo && !lowerKey.includes("music")) bucket.videos.push(url);
-    if (looksLikeImage && !isThumbnail) bucket.images.push(url);
-
-    return bucket;
+    if (isUrl && isVideo && !lowerKey.includes("music")) return text;
+    return "";
   }
 
   if (Array.isArray(value)) {
-    for (const item of value) collectUrlsDeep(item, keyHint, bucket);
-    return bucket;
+    for (const item of value) {
+      const found = findFirstUrlDeep(item, keyHint);
+      if (found) return found;
+    }
+    return "";
   }
 
   if (typeof value === "object") {
     for (const [key, item] of Object.entries(value)) {
-      collectUrlsDeep(item, key, bucket);
+      const found = findFirstUrlDeep(item, key);
+      if (found) return found;
     }
   }
 
-  return bucket;
-}
-
-function getFirstString(obj, paths) {
-  for (const path of paths) {
-    const value = getValueByPath(obj, path);
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
   return "";
 }
 
-function normalizeResult(result) {
-  return {
-    source: result.source || "Unknown",
-    title: result.title || "TikTok Download",
-    author: result.author || "",
-    videos: unique(result.videos || []).map(normalizeMediaUrl),
-    images: unique(result.images || []).map(normalizeMediaUrl),
-  };
-}
-
-function parseTikwm(data) {
-  const item = data?.data || data?.result || data;
-  if (!item || data?.code === -1) {
-    throw new Error(data?.msg || "TikWM returned empty data");
-  }
-
-  const videos = [
-    item.hdplay,
-    item.play,
-    item.wmplay,
-    item.video,
-    item.no_watermark,
-    item.nowm,
+function findVideoUrl(apiData) {
+  const paths = [
+    "data.hdplay",
+    "data.play",
+    "data.video",
+    "data.nowm",
+    "data.no_watermark",
+    "data.noWatermark",
+    "data.download",
+    "data.url",
+    "result.hdplay",
+    "result.play",
+    "result.video",
+    "result.nowm",
+    "result.no_watermark",
+    "result.noWatermark",
+    "result.download",
+    "result.url",
+    "hdplay",
+    "play",
+    "video",
+    "nowm",
+    "no_watermark",
+    "noWatermark",
+    "download",
+    "url",
   ];
 
-  const images = Array.isArray(item.images) ? item.images : [];
+  for (const path of paths) {
+    const value = getValueByPath(apiData, path);
+    if (typeof value === "string" && /^https?:\/\//i.test(value)) return value;
+  }
 
-  return normalizeResult({
-    source: "TikWM",
-    title: item.title,
-    author: item.author?.nickname || item.author?.unique_id || "",
-    videos,
-    images,
-  });
+  return findFirstUrlDeep(apiData);
 }
 
-function parseGeneric(data, source = "API") {
-  if (!data || typeof data !== "object") throw new Error("Empty API response");
-
-  const explicitVideos = [
-    "data.play",
-    "data.hdplay",
-    "data.wmplay",
-    "data.video",
-    "data.video.noWatermark",
-    "data.video.noWatermarkHd",
-    "data.video.noWatermark_hd",
-    "data.video.nowm",
-    "data.video_url",
-    "data.url",
-    "result.video",
-    "result.video.noWatermark",
-    "result.video.noWatermarkHd",
-    "result.video.nowm",
-    "result.video_url",
-    "result.nowm",
-    "result.url",
-    "video.noWatermark",
-    "video.nowm",
-    "video.url",
-  ]
-    .map((path) => getValueByPath(data, path))
-    .filter((value) => typeof value === "string");
-
-  const explicitImages = [
-    getValueByPath(data, "data.images"),
-    getValueByPath(data, "data.image"),
-    getValueByPath(data, "data.photos"),
-    getValueByPath(data, "result.images"),
-    getValueByPath(data, "result.image"),
-    getValueByPath(data, "result.photos"),
-    getValueByPath(data, "images"),
-    getValueByPath(data, "photos"),
-  ]
-    .flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []))
-    .filter((value) => typeof value === "string");
-
-  const deepUrls = collectUrlsDeep(data);
-
-  const title = getFirstString(data, [
+function findTitle(apiData) {
+  const paths = [
     "data.title",
     "data.desc",
     "result.title",
     "result.desc",
     "title",
     "desc",
-  ]);
+  ];
 
-  const author = getFirstString(data, [
-    "data.author.nickname",
-    "data.author.unique_id",
-    "data.author.name",
-    "result.author.nickname",
-    "result.author.unique_id",
-    "result.author.name",
-    "author.nickname",
-    "author.unique_id",
-    "author.name",
-  ]);
+  for (const path of paths) {
+    const value = getValueByPath(apiData, path);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
 
-  return normalizeResult({
-    source,
-    title,
-    author,
-    videos: [...explicitVideos, ...deepUrls.videos],
-    images: [...explicitImages, ...deepUrls.images],
-  });
+  return "No Title";
 }
 
-async function fetchFromApi(api, link) {
-  const response = await http.get(api.url(link), {
-    validateStatus: (status) => status >= 200 && status < 500,
-  });
-
-  const contentType = String(response.headers["content-type"] || "").toLowerCase();
-  if (response.status === 403 || contentType.includes("text/html")) {
-    throw new Error(`Blocked or HTML response (${response.status})`);
-  }
-
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const parsed = api.parser(response.data, api.name);
-  const result = normalizeResult({ ...parsed, source: api.name });
-
-  if (!result.videos.length && !result.images.length) {
-    throw new Error("No downloadable media URL found");
-  }
-
-  return result;
+function hasHdVideo(apiData, videoUrl) {
+  return Boolean(
+    getValueByPath(apiData, "data.hdplay") ||
+      getValueByPath(apiData, "result.hdplay") ||
+      /hd/i.test(videoUrl)
+  );
 }
 
-async function getTikTokMedia(link) {
-  const errors = [];
-
-  for (const api of APIS) {
-    try {
-      return await fetchFromApi(api, link);
-    } catch (error) {
-      errors.push(`${api.name}: ${error.message}`);
-      console.log(`TikTok API failed - ${api.name}:`, error.message);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
-}
-
-async function downloadBuffer(url, type = "video") {
-  const response = await http.get(url, {
-    responseType: "arraybuffer",
-    headers: {
-      Accept: type === "image" ? "image/*,*/*" : "video/mp4,video/*,*/*",
-      Referer: "https://www.tiktok.com/",
-    },
-    validateStatus: (status) => status >= 200 && status < 400,
-  });
-
-  const contentType = String(response.headers["content-type"] || "").toLowerCase();
-  if (contentType.includes("text/html")) {
-    throw new Error("Media URL returned HTML instead of file");
-  }
-
-  return Buffer.from(response.data);
-}
-
-async function react(client, m, text) {
+async function react(m, text) {
   try {
-    await client.sendMessage(m.jid, { react: { text, key: m.key } });
+    if (typeof m.react === "function") return await m.react(text);
   } catch {}
-}
-
-async function reply(client, m, text) {
-  if (typeof m.reply === "function") return m.reply(text);
-  return client.sendMessage(m.jid, { text }, { quoted: m });
-}
-
-function captionFor(result) {
-  let caption = `🎬 *TikTok Downloader*\n\n`;
-  if (result.title) caption += `📝 ${result.title}\n`;
-  if (result.author) caption += `👤 ${result.author}\n`;
-  caption += `🛰️ Source: ${result.source}\n\n`;
-  caption += `*❖ SADEW MD*`;
-  return caption;
 }
 
 Sparky(
   {
-    name: "tiktok",
-    alias: ["tt", "tiktokdl", "timg", "ttimg", "slideshow", "ttphoto"],
-    category: "download",
+    name: "tt",
+    alias: ["tiktok", "tiktokdl", "timg", "ttimg", "slideshow", "ttphoto"],
     fromMe: isPublic,
-    desc: "Download TikTok video or photo slideshow",
+    category: "downloader",
+    desc: "Download TikTok videos using Zanta API.",
   },
-  async ({ client, m, args }) => {
+  async ({ m, client, args }) => {
     const text = Array.isArray(args) ? args.join(" ") : String(args || "");
-    const link = extractTikTokUrl(text);
+    const tiktokUrl = extractTikTokUrl(text);
 
-    if (!link) {
-      await react(client, m, "❓");
-      return reply(
-        client,
-        m,
-        `╭─「 *TIKTOK DOWNLOADER* 」
-│
-├ *Usage:* .tiktok <TikTok link>
-├ *Example:* .tt https://vt.tiktok.com/xxxx/
-│
-╰─ *SADEW MD*`
+    if (!tiktokUrl) {
+      return await client.sendMessage(
+        m.jid,
+        { text: "❌ *Usage:* `.tt <TikTok URL>`" },
+        { quoted: m }
       );
     }
 
+    await react(m, "⏳");
+
     try {
-      await react(client, m, "⏳");
-      await client.sendPresenceUpdate("composing", m.jid);
+      const response = await axios.get(ZANTA_API_URL, {
+        httpsAgent,
+        timeout: 20000,
+        params: {
+          apiKey: ZANTA_API_KEY,
+          url: tiktokUrl,
+        },
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36",
+          Accept: "application/json, text/plain, */*",
+        },
+      });
 
-      const result = await getTikTokMedia(link);
-      const caption = captionFor(result);
+      const apiData = response.data;
+      const videoUrl = findVideoUrl(apiData);
 
-      if (result.videos.length) {
-        const video = await downloadBuffer(result.videos[0], "video");
+      if (!videoUrl) {
+        console.log("Zanta TikTok API response:", JSON.stringify(apiData).slice(0, 1500));
+        throw new Error("No video URL found from Zanta API.");
+      }
+
+      const title = findTitle(apiData);
+      const isHD = hasHdVideo(apiData, videoUrl) ? "High Quality (HD) ✅" : "Normal Quality ⚠️";
+
+      await react(m, "⬇️");
+
+      const videoStream = await axios.get(videoUrl, {
+        httpsAgent,
+        responseType: "arraybuffer",
+        timeout: 30000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36",
+          Referer: "https://www.tiktok.com/",
+          Accept: "video/mp4,video/*,*/*",
+        },
+      });
+
+      const videoBuffer = Buffer.from(videoStream.data);
+      const captionText =
+        `🎬 *ѕά𝓭є𝔀 ᵐ𝐃 Ŧ𝕚ᛕ𝕋𝔬ķ♫*\n\n` +
+        `📝 *Title:* ${title}\n` +
+        `✨ *Quality:* ${isHD}\n` +
+        `📦 *Size:* ${(videoBuffer.length / (1024 * 1024)).toFixed(2)}MB\n\n` +
+        `*Downloaded by SADEW-MD*`;
+
+      if (videoBuffer.length > 16 * 1024 * 1024) {
         await client.sendMessage(
           m.jid,
-          { video, mimetype: "video/mp4", caption },
+          {
+            document: videoBuffer,
+            mimetype: "video/mp4",
+            fileName: `tiktok_${Date.now()}.mp4`,
+            caption: captionText,
+          },
           { quoted: m }
         );
-        await react(client, m, "✅");
-        return;
-      }
-
-      const images = result.images.slice(0, 15);
-      for (let i = 0; i < images.length; i += 1) {
-        const image = await downloadBuffer(images[i], "image");
+      } else {
         await client.sendMessage(
           m.jid,
-          { image, caption: i === 0 ? caption : undefined },
-          { quoted: i === 0 ? m : undefined }
+          {
+            video: videoBuffer,
+            mimetype: "video/mp4",
+            caption: captionText,
+          },
+          { quoted: m }
         );
       }
 
-      await react(client, m, "✅");
+      await react(m, "✅");
     } catch (error) {
-      console.log("TikTok error:", error.message);
-      await react(client, m, "❌");
-      await reply(
-        client,
-        m,
-        "❌ TikTok download කරන්න බැරි වුණා. API එක block/down වෙලා තියෙන්න පුළුවන්. ටික වෙලාවකින් ආයෙත් try කරන්න, නැත්නම් වෙන TikTok link එකක් දාන්න."
-      );
-    } finally {
-      try {
-        await client.sendPresenceUpdate("paused", m.jid);
-      } catch {}
+      await react(m, "❌");
+      console.error("TikTok error:", error.response?.data || error.message);
+
+      const errorMsg = String(error.message || "").toLowerCase().includes("timeout")
+        ? "❌ *Timeout:* Server took too long."
+        : `❌ *Error:* ${error.message}`;
+
+      await client.sendMessage(m.jid, { text: errorMsg }, { quoted: m });
     }
   }
 );
