@@ -6,8 +6,8 @@ const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
-const TIKTOK_API_KEY = process.env.WHITESHADOW_API_KEY || "VK4fry";
-const TIKTOK_API_URL = "https://whiteshadow-x-api.onrender.com/api/download/tiktok";
+const ZANTA_API_KEY = process.env.WHITESHADOW_API_KEY || "VK4fry";
+const ZANTA_API_URL = "https://whiteshadow-x-api.onrender.com/api/download/tiktok";
 
 function extractTikTokUrl(text) {
   const match = String(text || "").match(/https?:\/\/[^\s]+/i);
