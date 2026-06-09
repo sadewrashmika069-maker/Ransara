@@ -75,7 +75,30 @@ function findPrefix(text) {
 }
 
 function getBody(m) {
-  return (m && (m.body || m.text || m.message || "")) || "";
+  if (!m) return "";
+
+  if (typeof m.body === "string") return m.body;
+  if (typeof m.text === "string") return m.text;
+
+  const message = m.message;
+  if (!message || typeof message === "string") return message || "";
+
+  if (message.conversation) return message.conversation;
+  if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
+  if (message.imageMessage?.caption) return message.imageMessage.caption;
+  if (message.videoMessage?.caption) return message.videoMessage.caption;
+  if (message.documentMessage?.caption) return message.documentMessage.caption;
+  if (message.buttonsResponseMessage?.selectedButtonId) {
+    return message.buttonsResponseMessage.selectedButtonId;
+  }
+  if (message.listResponseMessage?.singleSelectReply?.selectedRowId) {
+    return message.listResponseMessage.singleSelectReply.selectedRowId;
+  }
+  if (message.templateButtonReplyMessage?.selectedId) {
+    return message.templateButtonReplyMessage.selectedId;
+  }
+
+  return "";
 }
 
 function getChatId(m) {
