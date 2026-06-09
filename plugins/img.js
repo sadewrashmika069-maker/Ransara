@@ -13,7 +13,7 @@ const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = baileys;
 const API_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 const API_URL = "https://whiteshadow-x-api.onrender.com/api/search/google-image";
 const BOT_NAME = "Sadew Rashmika";
-const IMAGE_LIMIT = 6;
+const IMAGE_LIMIT = 10;
 
 const http = axios.create({
   timeout: 25000,
