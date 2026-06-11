@@ -8,12 +8,12 @@ const API_TOKEN = "VK4fry"; // ඔයා දුන්න API Key එක
 
 /**
  * ⚡ AI-Friendly Image Uploader
- * AI සර්වර්ස් වලට බ්ලොක් නොවී කෙලින්ම කියවිය හැකි සැබෑ Raw .jpg ලින්ක් සාදයි.
+ * AI සර්වර්ස් වලට කියවිය හැකි සැබෑ Raw .jpg ලින්ක් සාදයි.
  */
 async function uploadImageToPublicServer(buffer) {
   const filename = `sparky_edit_${Date.now()}.jpg`;
 
-  // --- ක්‍රමය 1: Envs.sh (Highly Recommended for AI APIs) ---
+  // --- ක්‍රමය 1: Envs.sh ---
   try {
     const formData = new FormData();
     formData.append("file", buffer, { filename, contentType: "image/jpeg" });
@@ -24,7 +24,11 @@ async function uploadImageToPublicServer(buffer) {
     });
 
     if (response.data && String(response.data).includes("https://envs.sh/")) {
-      const directUrl = String(response.data).trim();
+      let directUrl = String(response.data).trim();
+      // ලින්ක් එකේ අගට .jpg නැත්නම් බලෙන් එකතු කිරීම (For AI API Safety)
+      if (!directUrl.endsWith(".jpg") && !directUrl.endsWith(".jpeg")) {
+         directUrl = directUrl + "?ext=.jpg";
+      }
       console.log("Uploaded successfully to Envs.sh:", directUrl);
       return directUrl;
     }
@@ -32,7 +36,7 @@ async function uploadImageToPublicServer(buffer) {
     console.error("Envs.sh Upload Failed, trying backup...");
   }
 
-  // --- ක්‍රමය 2: Uguu.se (Super Fast Backup) ---
+  // --- ක්‍රමය 2: Uguu.se ---
   try {
     const formData = new FormData();
     formData.append("files[]", buffer, { filename, contentType: "image/jpeg" });
@@ -147,12 +151,20 @@ Sparky(
       try { if (typeof m.react === "function") await m.react("✅"); } catch {}
 
     } catch (apiError) {
-      console.error("AI API Error:", apiError.message);
+      console.error("AI API Error Details:", apiError.response?.data || apiError.message);
       try { if (typeof m.react === "function") await m.react("❌"); } catch {}
+      
+      // සර්වර් එක ඇතුලෙන් ආපු සැබෑ මැසේජ් එක Extract කරගැනීම
+      let serverRawError = apiError.message;
+      if (apiError.response?.data) {
+          serverRawError = typeof apiError.response.data === "object" 
+            ? JSON.stringify(apiError.response.data, null, 2) 
+            : String(apiError.response.data).slice(0, 200);
+      }
       
       const errMsg = apiError.message.includes("timeout") 
           ? "❌ *Timeout:* The AI took too long to generate the image."
-          : `❌ *Error:* ${apiError.message} (WhiteShadow API Crash)`;
+          : `❌ *Error:* ${apiError.message}\n\n📊 *WhiteShadow Server Response:* \`\`\`${serverRawError}\`\`\``;
           
       await m.reply(errMsg);
     }
