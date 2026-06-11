@@ -81,7 +81,7 @@ Sparky({
                         clearInterval(timer);
                         resolve();
                     }
-                }, 150);
+                }, 300);
             });
         });
 
