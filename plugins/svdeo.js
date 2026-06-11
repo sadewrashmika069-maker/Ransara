@@ -85,7 +85,7 @@ Sparky({
             });
         });
 
-        await wait(3000); // recording නතර කරන්න කලින් ටිකක් ඉන්න
+        await wait(5000); // recording නතර කරන්න කලින් ටිකක් ඉන්න
         await recorder.stop();
 
         const buffer = fs.readFileSync(outputFile);
