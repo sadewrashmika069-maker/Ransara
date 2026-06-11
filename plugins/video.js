@@ -13,7 +13,7 @@ const API_TOKEN =
   process.env.YT_API_TOKEN ||
   "VK4fry";
 const VIDEO_QUALITY = process.env.YT_VIDEO_QUALITY || "720";
-const MAX_VIDEO_MB = Number(process.env.MAX_VIDEO_MB || 120);
+const MAX_VIDEO_MB = Number(process.env.MAX_VIDEO_MB || 330);
 const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
 const FFMPEG_CRF = process.env.YT_FFMPEG_CRF || "20";
 const FFMPEG_PRESET = process.env.YT_FFMPEG_PRESET || "ultrafast";
