@@ -1,10 +1,13 @@
-// commands/svideo.js (using puppeteer-screen-recorder)
+// commands/svideo.js
 const { Sparky, isPublic } = require("../lib");
 const puppeteer = require("puppeteer");
 const { PuppeteerScreenRecorder } = require("puppeteer-screen-recorder");
 const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
 const path = require("path");
+
+// Helper function to wait (Promise-based sleep)
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function getQuery(args) {
     if (!args) return "";
@@ -52,7 +55,6 @@ Sparky({
         await page.setViewport({ width: 1280, height: 800 });
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // Use the correct recorder constructor
         recorder = new PuppeteerScreenRecorder(page, {
             ffmpegPath: ffmpegPath,
             fps: 25,
@@ -67,17 +69,17 @@ Sparky({
 
         await recorder.start(outputFile);
 
-        // Smooth scrolling
+        // Smooth scrolling (fix: use wait() instead of page.waitForTimeout)
         const scrollHeight = await page.evaluate(() => document.body.scrollHeight);
         const viewportHeight = 800;
         const totalSteps = Math.ceil(scrollHeight / viewportHeight);
         for (let i = 0; i <= totalSteps; i++) {
             await page.evaluate((y) => window.scrollTo(0, y), i * viewportHeight);
-            await page.waitForTimeout(100);
+            await wait(100); // 100ms per step
         }
-        await page.waitForTimeout(500);
+        await wait(500);
         await page.evaluate(() => window.scrollTo(0, 0));
-        await page.waitForTimeout(500);
+        await wait(500);
 
         await recorder.stop();
 
