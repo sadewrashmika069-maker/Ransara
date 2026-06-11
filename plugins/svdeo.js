@@ -3,7 +3,7 @@ const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
 
 // ⚙️ Paste your API key here
-const API_KEY = "YOUR_API_KEY";
+const API_KEY = "ws_0597952cf0cd1bcec61c917c070864c2b750b32f531a0663f5c1c57d5b14060d";
 
 function getQuery(args) {
     if (!args) return "";
