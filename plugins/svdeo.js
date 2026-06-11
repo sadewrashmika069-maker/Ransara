@@ -19,7 +19,7 @@ Sparky({
     name: "svideo",
     alias: ["webvideo", "scrollvideo"],
     category: "tools",
-    fromMe: true, // හොඳම ප්‍රතිඵල සඳහා owner only
+    fromMe: isPublic, // හොඳම ප්‍රතිඵල සඳහා all users
     desc: "📹 වෙබ් අඩවියක් ස්ක්‍රෝල් කරලා Video එකක් හදන්න"
 }, async ({ client, m, args }) => {
     let url = getQuery(args);
