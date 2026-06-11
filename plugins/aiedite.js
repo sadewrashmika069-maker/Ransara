@@ -8,7 +8,6 @@ const API_TOKEN = "VK4fry"; // ඔයා දුන්න API Key එක
 
 /**
  * Catbox.moe එකට Image Buffer එකක් Upload කරලා URL එක ගන්න Helper Function එක.
- * AI Edit API එකට URL එකක් අනිවාර්යයෙන්ම ඕනේ.
  */
 async function uploadToCatbox(buffer) {
   try {
@@ -24,7 +23,7 @@ async function uploadToCatbox(buffer) {
       timeout: 30000,
     });
 
-    return response.data; // අප්ලෝඩ් වුණු ෆොටෝ එකේ URL එක
+    return response.data;
   } catch (error) {
     console.error("Catbox Upload Error:", error.message);
     return null;
@@ -46,41 +45,44 @@ Sparky(
 
     if (!prompt) {
       return await m.reply(
-        `❌ *Usage:* Reply to an image and type:\n.edit <your prompt>\n\nExample:\n.edit add cyberpunk glasses`
+        `❌ *Usage:* Reply to an image and type:\n.edit <your prompt>\n\nExample:\n.edit add neon cyberpunk glasses`
       );
     }
 
-    // Command එක reply කලේ Image එකකටද කියලා check කිරීම
-    const isQuotedImage = m.quoted && (m.quoted.mtype === "imageMessage" || (m.quoted.mtype === "viewOnceMessage" && m.quoted.message?.imageMessage));
+    // ⚡ ඉතාම බලවත් Image Check එකක් (දැන් වැරදෙන්නේ නැත)
+    const isQuotedImage = m.quoted && (
+        m.quoted.mtype === "imageMessage" || 
+        m.quoted.type === "image" ||
+        (m.quoted.mime && m.quoted.mime.startsWith("image/")) ||
+        !!m.quoted.message?.imageMessage ||
+        !!m.quoted.message?.viewOnceMessage?.message?.imageMessage
+    );
 
     if (!isQuotedImage) {
       return await m.reply("❌ *Error:* Please reply to an *Image* to edit it.");
     }
 
     // React with Loading
-    try {
-      if (typeof m.react === "function") await m.react("⏳");
-    } catch {}
+    try { if (typeof m.react === "function") await m.react("⏳"); } catch {}
 
-    // 1. WhatsApp image buffer එක download කරගැනීම
+    // 1. WhatsApp image buffer එක download කරගැනීම (විවිධ ක්‍රම වලට Fail-Safe කර ඇත)
     await m.reply("⏳ _Downloading original image..._");
     let imageBuffer;
     try {
-      if (m.quoted.download) {
+      if (typeof m.quoted.download === "function") {
           imageBuffer = await m.quoted.download();
+      } else if (client.downloadMediaMessage) {
+          imageBuffer = await client.downloadMediaMessage(m.quoted);
       } else {
-          // If direct download isn't available, try getting it from quoted message
           const msg = m.quoted.message?.imageMessage || m.quoted.message?.viewOnceMessage?.message?.imageMessage;
-          if (msg) {
-              imageBuffer = await client.downloadMediaMessage(msg);
-          }
+          if (msg) imageBuffer = await client.downloadMediaMessage(msg);
       }
       
-      if (!imageBuffer) throw new Error("Could not download image.");
+      if (!imageBuffer) throw new Error("Could not download image. Buffer is empty.");
     } catch (err) {
       console.error("Image Download Error:", err);
       try { if (typeof m.react === "function") await m.react("❌"); } catch {}
-      return await m.reply("❌ *Error:* Failed to download the replied image.");
+      return await m.reply("❌ *Error:* Failed to download the replied image. " + err.message);
     }
 
     // 2. ෆොටෝ එක URL එකක් බවට පත් කිරීම (Catbox හරහා)
@@ -95,11 +97,10 @@ Sparky(
     // 3. WhiteShadow AI Edit API එක call කිරීම
     await m.reply(`🤖 _AI Editing image: "${prompt}"..._`);
     
-    // Final API URL එක සෑදීම
     const apiUrl = `${AI_EDIT_API_URL}?url=${encodeURIComponent(publicImageUrl)}&prompt=${encodeURIComponent(prompt)}&apitoken=${API_TOKEN}`;
 
     try {
-      const response = await axios.get(apiUrl, { timeout: 120000 }); // AI වැඩ වලට වෙලා යන නිසා timeout වැඩි කලා
+      const response = await axios.get(apiUrl, { timeout: 120000 });
       const apiData = response.data;
 
       if (apiData.status !== "success" || !apiData.result?.edited_image_url) {
@@ -123,10 +124,7 @@ Sparky(
         { quoted: m }
       );
 
-      // React with Success
-      try {
-        if (typeof m.react === "function") await m.react("✅");
-      } catch {}
+      try { if (typeof m.react === "function") await m.react("✅"); } catch {}
 
     } catch (apiError) {
       console.error("AI API Error:", apiError.response?.data || apiError.message);
