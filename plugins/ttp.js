@@ -215,8 +215,7 @@ function concatSafePath(filePath) {
 
 async function createVideoFromPhotos(imagePaths, audioPath, outputPath, quality) {
     const audioDuration = await getDuration(audioPath);
-    const eachDuration = audioDuration ? Math.max(1.8, Math.min(4.5, audioDuration / imagePaths.length)) : 3;
-
+const eachDuration = audioDuration ? (audioDuration / imagePaths.length) : 5;
     const listPath = path.join(path.dirname(outputPath), "images.txt");
     const listBody =
         imagePaths.map((file) => `file '${concatSafePath(file)}'\nduration ${eachDuration}`).join("\n") +
