@@ -7,58 +7,48 @@ const AI_EDIT_API_URL = "https://whiteshadow-x-api.onrender.com/api/ai/flatai-ed
 const API_TOKEN = "VK4fry"; // ඔයා දුන්න API Key එක
 
 /**
- * ⚡ Multi-Server Image Uploader Wrapper
- * Catbox Fail වුණොත් ඔටෝ Tmpfiles එකට මාරු වී URL එක සාදයි.
+ * ⚡ AI-Friendly Image Uploader
+ * AI සර්වර්ස් වලට බ්ලොක් නොවී කෙලින්ම කියවිය හැකි සැබෑ Raw .jpg ලින්ක් සාදයි.
  */
 async function uploadImageToPublicServer(buffer) {
   const filename = `sparky_edit_${Date.now()}.jpg`;
 
-  // --- ක්‍රමය 1: Catbox.moe (With Real Browser Headers) ---
-  try {
-    const formData = new FormData();
-    formData.append("reqtype", "fileupload");
-    formData.append("fileToUpload", buffer, { filename, contentType: "image/jpeg" });
-
-    const response = await axios.post("https://catbox.moe/user/api.php", formData, {
-      headers: {
-        ...formData.getHeaders(),
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "*/*",
-        "Origin": "https://catbox.moe",
-        "Referer": "https://catbox.moe/"
-      },
-      timeout: 25000,
-    });
-
-    if (response.data && String(response.data).startsWith("https://")) {
-      console.log("Uploaded successfully to Primary (Catbox):", response.data);
-      return response.data;
-    }
-  } catch (error) {
-    console.error("Primary Uploader (Catbox) Failed (Status 412 or Blocked). Trying Backup...");
-  }
-
-  // --- ක්‍රමය 2: Tmpfiles.org (Fail-Safe Backup) ---
+  // --- ක්‍රමය 1: Envs.sh (Highly Recommended for AI APIs) ---
   try {
     const formData = new FormData();
     formData.append("file", buffer, { filename, contentType: "image/jpeg" });
 
-    const response = await axios.post("https://tmpfiles.org/api/v1/upload", formData, {
-      headers: {
-        ...formData.getHeaders(),
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-      },
+    const response = await axios.post("https://envs.sh", formData, {
+      headers: formData.getHeaders(),
       timeout: 25000,
     });
 
-    if (response.data?.data?.url) {
-      // View URL එක Direct Download URL එකක් බවට පත් කිරීම
-      const directUrl = response.data.data.url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/");
-      console.log("Uploaded successfully to Backup (Tmpfiles):", directUrl);
+    if (response.data && String(response.data).includes("https://envs.sh/")) {
+      const directUrl = String(response.data).trim();
+      console.log("Uploaded successfully to Envs.sh:", directUrl);
       return directUrl;
     }
   } catch (error) {
-    console.error("Backup Uploader (Tmpfiles) also failed:", error.message);
+    console.error("Envs.sh Upload Failed, trying backup...");
+  }
+
+  // --- ක්‍රමය 2: Uguu.se (Super Fast Backup) ---
+  try {
+    const formData = new FormData();
+    formData.append("files[]", buffer, { filename, contentType: "image/jpeg" });
+
+    const response = await axios.post("https://uguu.se/upload.php", formData, {
+      headers: formData.getHeaders(),
+      timeout: 25000,
+    });
+
+    if (response.data?.success && response.data?.files?.[0]?.url) {
+      const directUrl = response.data.files[0].url;
+      console.log("Uploaded successfully to Uguu.se:", directUrl);
+      return directUrl;
+    }
+  } catch (error) {
+    console.error("Uguu.se Backup Uploader also failed:", error.message);
   }
 
   return null;
@@ -74,7 +64,6 @@ Sparky(
     desc: "Reply to an image with a prompt to edit it using AI.",
   },
   async ({ m, client, args }) => {
-    // Prompt එක check කිරීම
     const prompt = Array.isArray(args) ? args.join(" ").trim() : String(args || "").trim();
 
     if (!prompt) {
@@ -83,7 +72,6 @@ Sparky(
       );
     }
 
-    // Image Check එක
     const isQuotedImage = m.quoted && (
         m.quoted.mtype === "imageMessage" || 
         m.quoted.type === "image" ||
@@ -96,7 +84,6 @@ Sparky(
       return await m.reply("❌ *Error:* Please reply to an *Image* to edit it.");
     }
 
-    // React with Loading
     try { if (typeof m.react === "function") await m.react("⏳"); } catch {}
 
     // 1. WhatsApp image buffer එක download කරගැනීම
@@ -119,13 +106,13 @@ Sparky(
       return await m.reply("❌ *Error:* Failed to download the replied image.");
     }
 
-    // 2. ෆොටෝ එක URL එකක් බවට පත් කිරීම (Multi-Server)
+    // 2. ෆොටෝ එක URL එකක් බවට පත් කිරීම
     await m.reply("📤 _Generating public URL..._");
     const publicImageUrl = await uploadImageToPublicServer(imageBuffer);
 
     if (!publicImageUrl) {
       try { if (typeof m.react === "function") await m.react("❌"); } catch {}
-      return await m.reply("❌ *Error:* All upload servers failed to process this image. Cloudflare blocked the request.");
+      return await m.reply("❌ *Error:* Failed to generate a clean public image link.");
     }
 
     // 3. WhiteShadow AI Edit API එක call කිරීම
@@ -138,7 +125,7 @@ Sparky(
       const apiData = response.data;
 
       if (apiData.status !== "success" || !apiData.result?.edited_image_url) {
-        throw new Error(apiData.msg || apiData.result?.message || "AI API Failure.");
+        throw new Error(apiData.msg || apiData.result?.message || "AI API Server Internal Error.");
       }
 
       const editedImageUrl = apiData.result.edited_image_url;
@@ -165,7 +152,7 @@ Sparky(
       
       const errMsg = apiError.message.includes("timeout") 
           ? "❌ *Timeout:* The AI took too long to generate the image."
-          : `❌ *Error:* ${apiError.message}`;
+          : `❌ *Error:* ${apiError.message} (WhiteShadow API Crash)`;
           
       await m.reply(errMsg);
     }
