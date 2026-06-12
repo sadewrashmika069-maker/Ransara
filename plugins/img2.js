@@ -1,10 +1,10 @@
-const { cmd, commands } = require('../command');
-const axios = require('axios');
+const { Sparky } = require("../lib");
+const axios = require("axios");
 
-cmd({
+Sparky({
     pattern: "img2",
     alias: ["pinterest2", "pimg"],
-    desc: "Download 20 High Quality Images from Pinterest split into 2 horizontal batches.",
+    desc: "Download 20 High Quality Images from Pinterest split into 2 horizontal batches using RAM Buffers.",
     category: "download",
     use: '.img2 <search_query>',
     filename: __filename
@@ -12,7 +12,7 @@ cmd({
 async (conn, mek, m, { from, quoted, body, args, q, reply }) => {
     try {
         // 1. සර්ච් කරන්න ඕන දේ ඇතුළත් කරලාද බලනවා
-        if (!q) return reply("⚠️ කරුණාකර සර්ච් කරන්න ඕන දේ ඇතුළත් කරන්න!\n*උදාහරණ:* .img2 anime boy");
+        if (!q) return reply("⚠️ කරුණාකර සර්ච් කරන්න ඕන දේ ඇතුළත් කරන්න!\n*උදාහරණ:* .img2 nature");
 
         await reply("🔍 *Pinterest එකෙන් ඔයා ඉල්ලපු ෆොටෝ ටික හොයනවා... පොඩ්ඩක් ඉන්න මචං!*");
 
@@ -20,7 +20,7 @@ async (conn, mek, m, { from, quoted, body, args, q, reply }) => {
         const apiUrl = `https://whiteshadow-x-api.onrender.com/api/search/pinterest?q=${encodeURIComponent(q)}&apitoken=VK4fry`;
         const response = await axios.get(apiUrl);
         
-        // API එකෙන් එන රිසල්ට් Array එක ගන්නවා
+        // API එකෙන් එන රิසල්ට් Array එක ගන්නවා
         const results = response.data.result || response.data;
 
         if (!results || results.length === 0) {
@@ -30,19 +30,27 @@ async (conn, mek, m, { from, quoted, body, args, q, reply }) => {
         // 3. උපරිම ඉමේජ් 20ක් විතරක් වෙන් කරලා ගන්නවා
         const top20Images = results.slice(0, 20);
 
-        // 4. 10 ගානේ කෑලි දෙකකට (Batches) වෙන් කරනවා
+        // 4. ඔයා කියපු ලොජික් එකට 10 ගානේ කෑලි දෙකකට (Batches) වෙන් කරනවා
         const firstBatch = top20Images.slice(0, 10);
         const secondBatch = top20Images.slice(10, 20);
 
         // ==== පළවෙනි ඉමේජ් 10 යැවීම (Batch 1) ====
         await reply(`📸 *"${q}" පළමු ෆොටෝ 10 (Batch 1/2) මෙන්න:*`);
         for (const imgUrl of firstBatch) {
-            await conn.sendMessage(from, { 
-                image: { url: imgUrl }, 
-                caption: `✨ ＳＡＤＥＷ－Ｘ－ＭＤ | Batch 1` 
-            }, { quoted: mek });
+            try {
+                // GitHub Actions වල ඩිස්ක් එක සේෆ් කරන්න කෙලින්ම RAM Buffer එකකට ගන්නවා
+                const imgRes = await axios.get(imgUrl, { responseType: 'arraybuffer' });
+                const buffer = Buffer.from(imgRes.data);
+                
+                await conn.sendMessage(from, { 
+                    image: buffer, 
+                    caption: `✨ ＳＡＤＥＷ－Ｘ－ＭＤ | Batch 1` 
+                }, { quoted: mek });
+            } catch (imgErr) {
+                console.error("Image download failed:", imgErr.message);
+            }
             
-            // සර්වර් එක crash නොවෙන්න සහ WhatsApp block නොවෙන්න පොඩි ඩිලේ (Delay) එකක්
+            // WhatsApp Spam නොවෙන්න සහ සර්වර් එක ස්මූත් වෙන්න පොඩි ඩිලේ එකක්
             await new Promise(resolve => setTimeout(resolve, 600));
         }
 
@@ -50,10 +58,18 @@ async (conn, mek, m, { from, quoted, body, args, q, reply }) => {
         if (secondBatch.length > 0) {
             await reply(`📸 *"${q}" ඉතිරි ෆොටෝ 10 (Batch 2/2) මෙන්න:*`);
             for (const imgUrl of secondBatch) {
-                await conn.sendMessage(from, { 
-                    image: { url: imgUrl }, 
-                    caption: `✨ ＳＡＤＥＷ－Ｘ－ＭＤ | Batch 2` 
-                }, { quoted: mek });
+                try {
+                    // මේකත් කෙලින්ම RAM Buffer එකෙන් යවන්නේ
+                    const imgRes = await axios.get(imgUrl, { responseType: 'arraybuffer' });
+                    const buffer = Buffer.from(imgRes.data);
+                    
+                    await conn.sendMessage(from, { 
+                        image: buffer, 
+                        caption: `✨ ＳＡＤＥＷ－Ｘ－ＭＤ | Batch 2` 
+                    }, { quoted: mek });
+                } catch (imgErr) {
+                    console.error("Image download failed:", imgErr.message);
+                }
                 
                 await new Promise(resolve => setTimeout(resolve, 600));
             }
