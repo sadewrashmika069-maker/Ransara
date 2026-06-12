@@ -209,30 +209,30 @@ Sparky({
     }
   });
 
-// Sparky({
-//     name: "xnxx",
-//     fromMe: isPublic,
-//     category: "downloader",
-//     desc: "Download media from XNXX by search or URL",
-// },
-// async ({
-//     m, client, args
-// }) => {
-//     try {
-//         let match = args || m.quoted?.text;
-//         if (!match) return await m.reply(lang.NEED_Q);
-//             await m.react('🔎');
-//             const { result } = await getJson(config.API + "/api/search/xnxx?search=" + match);
-//             await m.react('⬇️');
-//             var xnxx = result.result[0].link
-//             const xdl = await getJson(`${config.API}/api/downloader/xnxx?url=${xnxx}`)
-//             await m.sendFromUrl(xdl.data.files.high, { caption: xdl.data.title });
-//         await m.react('✅');
-//     } catch (error) {
-//         await m.react('❌');
-//         m.reply(error);
-//     }
-// });
+ Sparky({
+     name: "xnxx",
+     fromMe: isPublic,
+     category: "downloader",
+     desc: "Download media from XNXX by search or URL",
+ },
+ async ({
+     m, client, args
+ }) => {
+     try {
+         let match = args || m.quoted?.text;
+         if (!match) return await m.reply(lang.NEED_Q);
+             await m.react('🔎');
+             const { result } = await getJson(config.API + "/api/search/xnxx?search=" + match);
+             await m.react('⬇️');
+             var xnxx = result.result[0].link
+             const xdl = await getJson(`${config.API}/api/downloader/xnxx?url=${xnxx}`)
+             await m.sendFromUrl(xdl.data.files.high, { caption: xdl.data.title });
+         await m.react('✅');
+     } catch (error) {
+         await m.react('❌');
+         m.reply(error);
+     }
+ });
 
 
 Sparky({
