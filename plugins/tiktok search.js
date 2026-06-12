@@ -10,15 +10,15 @@ const API_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 const WHITESHADOW_API =
   "https://whiteshadow-x-api.onrender.com/api/search/tiktok";
 const TIKWM_SEARCH_API = "https://tikwm.com/api/feed/search";
-const MAX_RESULTS = Number(process.env.TS_MAX_RESULTS || 6);
-const MAX_VIDEO_MB = Number(process.env.TS_MAX_VIDEO_MB || 45);
+const MAX_RESULTS = Number(process.env.TS_MAX_RESULTS || 9);
+const MAX_VIDEO_MB = Number(process.env.TS_MAX_VIDEO_MB || 80);
 const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
 
 const EMOJI_SEARCH = "\uD83D\uDD0D";
 const EMOJI_SUCCESS = "\u26A1";
 const EMOJI_ERROR = "\u274C";
 const EMOJI_DOWNLOAD = "\uD83D\uDCE5";
-const OUTER_HEADER_TITLE = toFullWidth("lıllı 🪀ＳＡＤＥＷ－Ｘ－*〽️𝔻* 👁️‍🗨️ıllı");
+const OUTER_HEADER_TITLE = toFullWidth("𝐥𝐥ı𝐥𝐥ı ıllıllı ★彡 *👑ＳＡＤＥＷ－Ｘ－ＭＤ*🔥 彡★ ıllıı 𝐥𝐥ı𝐥𝐥ı");
 const OUTER_FOOTER_TEXT = "| POWERED BY 👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥";
 const CARD_FOOTER_TEXT = "👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥";
 
