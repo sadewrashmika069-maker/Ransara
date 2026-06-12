@@ -6,7 +6,6 @@ const gis = require("g-i-s");
 const config = require("../config.js");
 const lang = getString('download');
 
-
 Sparky(
     {
         name: "insta",
@@ -19,7 +18,6 @@ Sparky(
     }) => {
         args = args || m.quoted?.text;
         if (!args) return await m.reply(lang.NEED_URL);
-        //if (isUrl(args)) return await m.reply(lang.NOT_URL);
         try {
             await m.react('⬇️');
             let response = await getJson(config.API + "/api/downloader/igdl?url=" + args);
@@ -53,7 +51,7 @@ async ({ m, args }) => {
             .map(msg => ({
                 role: msg.role,
                 content: String(msg.content)
-            }))
+            }));
         const messages = [
             {
                 role: "system",
@@ -72,49 +70,48 @@ async ({ m, args }) => {
     }
 });
 
+Sparky(
+    {
+        name: "img",
+        fromMe: isPublic,
+        desc: "Google Image search",
+        category: "downloader",
+    },
+    async ({
+        m, client, args
+    }) => {
+        try {
+            async function gimage(query, amount = 5) {
+                let list = [];
+                return new Promise((resolve, reject) => {
+                    gis(query, async (error, result) => {
+                        if (error || !result) return reject(error || "No results");
+                        let limit = result.length < amount ? result.length : amount;
+                        for (var i = 0; i < limit; i++) {
+                            if (result[i] && result[i].url) {
+                                list.push(result[i].url);
+                            }
+                        }
+                        resolve(list); // Fixed: Loop එකෙන් එලියට ගත්තා හරියටම ගාන පිරෙන්න
+                    });
+                });
+            }
+            
+            if (!args) return await m.reply("Enter Query,Number");
+            let [query, amount] = args.split(",");
+            let finalAmount = amount ? parseInt(amount.trim()) : 5;
 
-
- Sparky(
-     {
-         name: "img",
-         fromMe: isPublic,
-         desc: "Google Image search",
-         category: "downloader",
-     },
-     async ({
-         m, client, args
-     }) => {
-         try {
-             async function gimage(query, amount = 5) {
-                 let list = [];
-                 return new Promise((resolve, reject) => {
-                     gis(query, async (error, result) => {
-                         for (
-                             var i = 0;
-                             i < (result.length < amount ? result.length : amount);
-                             i++
-                         ) {
-                             list.push(result[i].url);
-                             resolve(list);
-                         }
-                     });
-                 });
-             }
-             if (!args) return await m.reply("Enter Query,Number");
-             let [query,
-                 amount] = args.split(",");
-             let result = await gimage(query, amount);//             await m.reply(
-                 `_Downloading ${amount || 5} images for ${query}_`
-             );
-             for (let i of result) {
-                await m.sendMsg(m.jid, i, {}, "image")
-             }
-
-         } catch (e) {
-             console.log(e)
-         }
-     }
- );
+            await m.reply(`_Downloading ${finalAmount} images for ${query}_`); // Fixed: Comment error එක හැදුවා
+            let result = await gimage(query, finalAmount);
+            
+            for (let i of result) {
+               await m.sendMsg(m.jid, i, {}, "image")
+            }
+        } catch (e) {
+            console.log(e)
+        }
+    }
+);
 
 Sparky({
     name: "pintrest",
@@ -129,7 +126,6 @@ async ({
         let match = args || m.quoted?.text;
         if (!match) return await m.reply(lang.NEED_URL);
         await m.react('⬇️');
-        //if (!match.includes("pin.it")) return await m.reply("_Please provide a valid Pinterest URL_");
         const result = await getJson(config.API + "/api/downloader/pin?url=" + match);
         await m.sendFromUrl(result.data.url, { caption: result.data.created_at });
         await m.react('✅');
@@ -173,21 +169,21 @@ Sparky({
     try {
         args = args || m.quoted?.text;
         if(!args) return await m.reply(lang.NEED_Q);
-  await m.react('🔎');
-  const ser = await getJson(config.API + "/api/search/spotify?search=" + args)
-  const play = ser.data[0];
+        await m.react('🔎');
+        const ser = await getJson(config.API + "/api/search/spotify?search=" + args)
+        const play = ser.data[0];
         await m.react('⬇️');
         await m.reply(`${lang.WAIT} ${play.name} By ${play.artists}`)
-  const url = await spdl(play.link);
-  await m.sendMsg(m.jid , url, { mimetype: "audio/mpeg" } , "audio")
-   await m.react('✅');     
+        const url = await spdl(play.link);
+        await m.sendMsg(m.jid , url, { mimetype: "audio/mpeg" } , "audio")
+        await m.react('✅');     
     } catch (error) {
         await m.react('❌');
         m.reply(error);
     }
   });
 
-  Sparky({
+Sparky({
     name: "spotifydl",
     fromMe: isPublic,
     category: "downloader",
@@ -200,16 +196,16 @@ Sparky({
         args = args || m.quoted?.text;
         if(!args) return await m.reply(lang.NEED_URL);
         await m.react('⬇️');
-  const url = await spdl(args);
-  await m.sendMsg(m.jid , url, { mimetype: "audio/mpeg" } , "audio")
-   await m.react('✅');     
+        const url = await spdl(args);
+        await m.sendMsg(m.jid , url, { mimetype: "audio/mpeg" } , "audio")
+        await m.react('✅');     
     } catch (error) {
         await m.react('❌');
         m.reply(error);
     }
   });
 
- Sparky({
+Sparky({
      name: "xnxx",
      fromMe: isPublic,
      category: "downloader",
@@ -221,19 +217,18 @@ Sparky({
      try {
          let match = args || m.quoted?.text;
          if (!match) return await m.reply(lang.NEED_Q);
-             await m.react('🔎');
-             const { result } = await getJson(config.API + "/api/search/xnxx?search=" + match);
-             await m.react('⬇️');
-             var xnxx = result.result[0].link
-             const xdl = await getJson(`${config.API}/api/downloader/xnxx?url=${xnxx}`)
-             await m.sendFromUrl(xdl.data.files.high, { caption: xdl.data.title });
+         await m.react('🔎');
+         const { result } = await getJson(config.API + "/api/search/xnxx?search=" + match);
+         await m.react('⬇️');
+         var xnxx = result.result[0].link
+         const xdl = await getJson(`${config.API}/api/downloader/xnxx?url=${xnxx}`)
+         await m.sendFromUrl(xdl.data.files.high, { caption: xdl.data.title });
          await m.react('✅');
      } catch (error) {
          await m.react('❌');
          m.reply(error);
      }
  });
-
 
 Sparky({
     name: "terabox",
@@ -257,7 +252,6 @@ async ({
     }
 });
 
-
 Sparky({
     name: "gitclone",
     fromMe: isPublic,
@@ -273,7 +267,7 @@ async ({
         await m.react('⬇️');
         let user = match.split("/")[3];
         let repo = match.split("/")[4];
-        const msg = await m.reply(lang.DOWNLOADING);
+        await m.reply(lang.DOWNLOADING);
         await client.sendMessage(m.jid, {
             document: {
                 url: `https://api.github.com/repos/${user}/${repo}/zipball`
