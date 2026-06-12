@@ -19,17 +19,30 @@ async ({ m, client, args }) => {
         const searchUrl = `https://api.zanta-mini.store/api/xnxx/search?apiKey=zan_FIAO7Ayh_eo1vllkep6&url=${encodeURIComponent(query)}`;
         const searchResponse = await axios.get(searchUrl);
         
+        // API එකෙන් එන විවිධ දත්ත ව්‍යුහයන් චෙක් කිරීම
         const results = searchResponse.data?.result || searchResponse.data?.data || searchResponse.data;
         
-        if (!results || results.length === 0) {
+        if (!results || (Array.isArray(results) && results.length === 0)) {
             await m.react('❌');
             return await m.reply("_ප්‍රතිඵල කිසිවක් හමු වුණේ නැත!_");
         }
         
-        const videoUrl = results[0]?.link || results[0]?.url;
+        // පළමු රිසල්ට් එක වෙන් කර ගැනීම
+        let firstResult = Array.isArray(results) ? results[0] : results;
+        let videoUrl = "";
+
+        // API එක කෙලින්ම Strings Array එකක් ["https://...", "https://..."] එවනවා නම්
+        if (typeof firstResult === 'string') {
+            videoUrl = firstResult;
+        } else if (firstResult && typeof firstResult === 'object') {
+            // Object එකක් විදිහට එවනවා නම් පොදු හැම Key එකක්ම චෙක් කරනවා
+            videoUrl = firstResult.link || firstResult.url || firstResult.video || firstResult.href;
+        }
+
+        // ලින්ක් එක අහු වුණේ නැත්නම් චැට් එකටම JSON එක එවන්න හැදුවා ට්‍රබල්ෂූට් කරන්න ලේසි වෙන්න
         if (!videoUrl) {
             await m.react('❌');
-            return await m.reply("_වීඩියෝ ලින්ක් එක සොයාගත නොහැකි විය!_");
+            return await m.reply(`_වීඩියෝ ලින්ක් එක සොයාගත නොහැකි විය!_\n\n*API Response:* \`\`\`${JSON.stringify(searchResponse.data).slice(0, 400)}\`\`\``);
         }
 
         await m.react('⬇️');
@@ -40,13 +53,19 @@ async ({ m, client, args }) => {
         
         const dlData = downloadResponse.data?.result || downloadResponse.data?.data || downloadResponse.data;
         
-        const directDownloadLink = dlData?.files?.high || dlData?.url || dlData?.download || dlData?.direct_link;
-        const videoTitle = dlData?.title || "XNXX Video";
+        let directDownloadLink = "";
+        let videoTitle = "XNXX Video";
+
+        if (typeof dlData === 'string') {
+            directDownloadLink = dlData;
+        } else if (dlData && typeof dlData === 'object') {
+            directDownloadLink = dlData.files?.high || dlData.files?.low || dlData.url || dlData.download || dlData.direct_link;
+            videoTitle = dlData.title || "XNXX Video";
+        }
 
         if (!directDownloadLink) {
-            console.log("[Zanta-API Debug]:", JSON.stringify(downloadResponse.data));
             await m.react('❌');
-            return await m.reply("_Direct Download Link එක ලබා ගැනීමට නොහැකි විය!_");
+            return await m.reply(`_Direct Download Link එක ලබා ගැනීමට නොහැකි විය!_\n\n*API Response:* \`\`\`${JSON.stringify(downloadResponse.data).slice(0, 400)}\`\`\``);
         }
 
         // 3. 🔥 WHATSAPP UPLOAD
