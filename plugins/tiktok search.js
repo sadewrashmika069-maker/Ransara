@@ -18,9 +18,9 @@ const EMOJI_SEARCH = "\uD83D\uDD0D";
 const EMOJI_SUCCESS = "\u26A1";
 const EMOJI_ERROR = "\u274C";
 const EMOJI_DOWNLOAD = "\uD83D\uDCE5";
-const OUTER_HEADER_TITLE = toFullWidth("❄️... ⚡S̷A̷D̷E̷W̷ ̷M̷D̷⚡");
-const OUTER_FOOTER_TEXT = "| POWERED BY SADEW-MD";
-const CARD_FOOTER_TEXT = "WHITESHADOW LITE BOT";
+const OUTER_HEADER_TITLE = toFullWidth("lıllı 🪀ＳＡＤＥＷ－Ｘ－*〽️𝔻* 👁️‍🗨️ıllı");
+const OUTER_FOOTER_TEXT = "| POWERED BY 👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥";
+const CARD_FOOTER_TEXT = "👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥";
 
 function toFullWidth(text) {
   return String(text).replace(/[A-Z0-9.]/g, (char) => {
