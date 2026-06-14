@@ -18,48 +18,64 @@ Sparky({
     alias: ["alldl", "multidownload"],
     category: "download",
     fromMe: isPublic,
-    desc: "🌐 ඕනෑම social media link එකකින් video/image/audio බාගන්න\nSupported: TikTok, Instagram, YouTube, Twitter, Facebook, Reddit, Pinterest, etc."
+    desc: "🌐 Download media from TikTok, Instagram, YouTube, Twitter, Facebook, etc."
 }, async ({ client, m, args }) => {
     let url = getQuery(args);
     if (!url) {
         return m.reply(`🌐 *All-in-One Downloader*
 
 *Usage:* ${m.prefix}aio <link>
-*Example:* ${m.prefix}aio https://www.tiktok.com/@user/video/123456789
-
-*Supported platforms:* TikTok, Instagram, YouTube, Twitter, Facebook, Reddit, Pinterest, Imgur, etc.`);
+*Example:* ${m.prefix}aio https://www.tiktok.com/@user/video/123456789`);
     }
 
-    // Validate URL format
     if (!url.startsWith("http")) url = "https://" + url;
 
     await m.react("⏳");
     await client.sendPresenceUpdate('composing', m.jid);
-    await m.reply(`🔍 *Fetching media from:*\n${url}`);
+    await m.reply(`🔍 *Processing:* ${url}`);
 
     try {
-        // 1. Call the AIO API
         const apiUrl = `${API_BASE}?url=${encodeURIComponent(url)}&apitoken=${API_TOKEN}`;
+        console.log(`[AIO] Requesting: ${apiUrl}`);
         const response = await axios.get(apiUrl, { timeout: 20000 });
 
-        // 2. Check API response
-        if (!response.data || response.data.Status === false || response.data.Code !== 200) {
-            throw new Error(response.data?.Error || "Invalid URL or unsupported platform");
+        console.log(`[AIO] Full API response:`, JSON.stringify(response.data, null, 2));
+
+        // Check if response indicates error
+        if (!response.data || response.data.Status === false) {
+            throw new Error(response.data?.Error || "API returned failure status");
         }
 
         const result = response.data.Result;
-        if (!result || !result.download_url) {
-            throw new Error("No download URL found in response");
+        if (!result) {
+            throw new Error("Result object is missing");
         }
 
-        const downloadUrl = result.download_url;
-        const title = result.title || "Media";
-        const quality = result.quality || "HD";
-        const type = result.type || "video"; // video, image, audio
+        // Try to find download URL (different possible field names)
+        let downloadUrl = result.download_url || result.url || result.link || result.downloadLink || result.video_url;
+        let title = result.title || result.filename || "Media";
+        let quality = result.quality || result.resolution || "HD";
+        let type = result.type || (downloadUrl?.match(/\.(mp4|mkv)/i) ? "video" : "image");
+
+        if (!downloadUrl) {
+            // If there's a list of videos, pick the highest quality
+            if (result.videos && result.videos.length > 0) {
+                const best = result.videos.reduce((a, b) => (a.resolution > b.resolution ? a : b));
+                downloadUrl = best.url || best.link;
+                quality = best.resolution || "HD";
+            } else if (result.medias && result.medias.length > 0) {
+                const best = result.medias[result.medias.length - 1];
+                downloadUrl = best.url || best.link;
+                quality = best.quality || "HD";
+            }
+        }
+
+        if (!downloadUrl) {
+            throw new Error("No download URL found in response. Full response logged.");
+        }
 
         await m.reply(`✅ *${title}* (${quality})\n⬇️ Downloading file...`);
 
-        // 3. Download the actual file
         const fileRes = await axios.get(downloadUrl, {
             responseType: 'arraybuffer',
             timeout: 90000,
@@ -69,28 +85,20 @@ Sparky({
 
         const buffer = Buffer.from(fileRes.data);
         const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-        if (buffer.length < 5000) throw new Error("Downloaded file is too small – invalid.");
+        if (buffer.length < 5000) throw new Error("File too small");
 
-        // 4. Determine file extension and mime type
-        let mimetype = "application/octet-stream";
-        let fileName = `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}`;
-
-        if (type === "video" || downloadUrl.match(/\.(mp4|mkv|mov|webm)/i)) {
-            mimetype = "video/mp4";
-            fileName += ".mp4";
-        } else if (type === "audio" || downloadUrl.match(/\.(mp3|m4a|wav|ogg)/i)) {
-            mimetype = "audio/mpeg";
-            fileName += ".mp3";
-        } else if (type === "image" || downloadUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
+        let ext = ".mp4";
+        let mimetype = "video/mp4";
+        if (downloadUrl.match(/\.(jpg|jpeg|png|gif)/i)) {
+            ext = ".jpg";
             mimetype = "image/jpeg";
-            fileName += ".jpg";
-        } else {
-            fileName += ".mp4"; // default
+        } else if (downloadUrl.match(/\.(mp3|m4a|wav)/i)) {
+            ext = ".mp3";
+            mimetype = "audio/mpeg";
         }
+        const fileName = `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}${ext}`;
+        const caption = `🌐 *${title}*\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *AIO Downloader*`;
 
-        const caption = `🌐 *AIO Downloader*\n📌 *Title:* ${title}\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *Powered by WhiteShadow API*`;
-
-        // 5. Send the file (as document to avoid any limitations)
         await client.sendMessage(m.jid, {
             document: buffer,
             mimetype: mimetype,
@@ -99,16 +107,14 @@ Sparky({
         }, { quoted: m });
 
         await m.react("✅");
-        await m.reply(`✅ *Download complete!* ${title} (${fileSizeMB} MB)`);
+        await m.reply(`✅ *Download complete!*`);
 
     } catch (error) {
-        console.error("AIO download error:", error);
+        console.error("AIO error:", error);
         await m.react("❌");
         let errorMsg = `❌ *Download failed*\n\n`;
-        if (error.message.includes("Invalid URL")) {
-            errorMsg += `The link seems invalid or the platform is not supported.\nSupported sites: TikTok, Instagram, YouTube, Twitter, Facebook, Reddit, Pinterest, etc.`;
-        } else if (error.message.includes("timeout")) {
-            errorMsg += `The download took too long. Please try again later.`;
+        if (error.message.includes("Invalid")) {
+            errorMsg += `The link is invalid or platform not supported.`;
         } else {
             errorMsg += `Error: ${error.message.substring(0, 150)}`;
         }
