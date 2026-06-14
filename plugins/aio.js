@@ -30,37 +30,80 @@ async ({ m, client, args }) => {
 
         await m.react('⏳');
 
-        // නිවැරදි කරන ලද API URL එක (apitoken parameter එක සමඟ)
+        // API URL එක
         const apiUrl = `https://whiteshadow-x-api.onrender.com/api/download/aio?url=${encodeURIComponent(url)}&apitoken=VK4fry`;
         const response = await axios.get(apiUrl);
 
-        // API Response එක සාර්ථක නම් (Code: 200 සහ Status: true නම්)
+        // API Response එක සාර්ථක නම්
         if (response.data && response.data.Code === 200 && response.data.Result) {
             const res = response.data.Result;
             
+            // සර්වර් ලොග් එකේ බලාගන්න API එකෙන් එන දේ පින්ට් කරමු
+            console.log("--- WhiteShadow API Result ---", res);
+
             let downloadLink = "";
             let title = "AIO Downloaded Media";
             
-            if (typeof res === 'object' && res !== null) {
-                downloadLink = res.url || res.link || res.download || res.dl_link || res.video || res.audio;
+            // 1. Array එකක් ආවොත් (සමහර සයිට් වල ලිස්ට් එකක් එනවා)
+            if (Array.isArray(res) && res.length > 0) {
+                const first = res[0];
+                downloadLink = first.url || first.link || first.download || first.dl_link || first.video || first.audio;
+                title = first.title || first.caption || title;
+            } 
+            // 2. Object එකක් ආවොත්
+            else if (typeof res === 'object' && res !== null) {
+                downloadLink = res.url || res.link || res.download || res.dl_link || res.video || res.audio || res.url_download;
                 title = res.title || res.caption || title;
-            } else if (typeof res === 'string') {
+            } 
+            // 3. කෙලින්ම String එකක් ආවොත්
+            else if (typeof res === 'string') {
                 downloadLink = res;
             }
 
             if (!downloadLink) {
                 await m.react('❌');
-                return await m.reply("_⚠️ කණගාටුයි, මෙම ලින්ක් එකෙන් Media URL එක වෙන් කර ගැනීමට නොහැකි විය!_");
+                return await m.reply("_⚠️ කණගාටුයි, මෙම ලින්ක් එකෙන් ඩවුන්ලෝඩ් URL එක වෙන් කර ගැනීමට නොහැකි විය!_");
             }
 
-            // වීඩියෝ/ඕඩියෝ එක චැට් එකට අප්ලෝඩ් කිරීම
-            await m.sendFromUrl(downloadLink, { 
-                caption: `🎥 *${title}*\n\n_Powered by SADEW-MD_` 
+            // 🔥 [FIX] m.sendFromUrl වෙනුවට අපිම Buffer එක අරන් කෙලින්ම යවන සුපිරි සිස්ටම් එක
+            const mediaRes = await axios.get(downloadLink, { 
+                responseType: 'arraybuffer',
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
             });
+            
+            const contentType = mediaRes.headers['content-type'] || '';
+            const buffer = Buffer.from(mediaRes.data, 'binary');
+
+            // Content-Type එක අනුව වීඩියෝ/ඕඩියෝ වෙන් කර යැවීම
+            if (contentType.includes('video')) {
+                await client.sendMessage(m.jid, { 
+                    video: buffer, 
+                    caption: `🎥 *${title}*\n\n_Powered by SADEW-MD_` 
+                }, { quoted: m });
+            } 
+            else if (contentType.includes('audio')) {
+                await client.sendMessage(m.jid, { 
+                    audio: buffer, 
+                    mimetype: 'audio/mp4', 
+                    ptt: false 
+                }, { quoted: m });
+            } 
+            else if (contentType.includes('image')) {
+                await client.sendMessage(m.jid, { 
+                    image: buffer, 
+                    caption: `📸 *${title}*\n\n_Powered by SADEW-MD_` 
+                }, { quoted: m });
+            } 
+            else {
+                // Content-Type එක අඳුරගන්න බැරි වුණොත් Default වීඩියෝ එකක් විදිහට ට්‍රයි කරනවා
+                await client.sendMessage(m.jid, { 
+                    video: buffer, 
+                    caption: `🎥 *${title}*\n\n_Powered by SADEW-MD_` 
+                }, { quoted: m });
+            }
             
             await m.react('✅');
         } else {
-            // උඹ දුන්න response එකේ විදිහට වැරදි ලින්ක් එකක් ආවොත් Error එක පෙන්වීම
             await m.react('❌');
             const errorMsg = response.data?.Error || "මෙම ලින්ක් එක දැනට ක්‍රියාත්මක නොවේ!";
             return await m.reply(`*⚠️ API Error:* ${errorMsg}`);
