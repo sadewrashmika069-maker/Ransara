@@ -2,11 +2,12 @@
 const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
 const ffmpeg = require("fluent-ffmpeg");
+const ffmpegStatic = require("ffmpeg-static");
 const fs = require("fs");
 const path = require("path");
-const { promisify } = require("util");
-const stream = require("stream");
-const pipeline = promisify(stream.pipeline);
+
+// ffmpeg path set කරන්න
+ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const API_TOKEN = "VK4fry";
 const YT_API_BASE = "https://whiteshadow-x-api.onrender.com/api/download/youtube";
@@ -20,12 +21,18 @@ function getQuery(args) {
     return "";
 }
 
-// Convert video to phone-friendly MP4 (H.264 + AAC) using ffmpeg
-async function convertToCompatible(inputBuffer, outputPath) {
+// temporary folder හදන්න
+const tempDir = path.join(__dirname, "../temp");
+if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+// video එක phone‑compatible (H.264 + AAC) format එකට convert කරන function
+async function convertToPhoneCompatible(inputBuffer) {
+    const inputPath = path.join(tempDir, `input_${Date.now()}.mp4`);
+    const outputPath = path.join(tempDir, `output_${Date.now()}.mp4`);
+    fs.writeFileSync(inputPath, inputBuffer);
+    
     return new Promise((resolve, reject) => {
-        const tempInput = path.join(__dirname, "../temp", `input_${Date.now()}.mp4`);
-        fs.writeFileSync(tempInput, inputBuffer);
-        ffmpeg(tempInput)
+        ffmpeg(inputPath)
             .outputOptions([
                 '-c:v libx264',
                 '-c:a aac',
@@ -35,11 +42,14 @@ async function convertToCompatible(inputBuffer, outputPath) {
             ])
             .output(outputPath)
             .on('end', () => {
-                fs.unlinkSync(tempInput);
-                resolve();
+                const convertedBuffer = fs.readFileSync(outputPath);
+                fs.unlinkSync(inputPath);
+                fs.unlinkSync(outputPath);
+                resolve(convertedBuffer);
             })
             .on('error', (err) => {
-                fs.unlinkSync(tempInput);
+                fs.unlinkSync(inputPath);
+                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
                 reject(err);
             })
             .run();
@@ -69,12 +79,8 @@ ${m.prefix}aio https://www.facebook.com/...`);
     await client.sendPresenceUpdate('composing', m.jid);
     await m.reply(`🔍 *Processing:* ${url}`);
 
-    // Create temp directory if not exists
-    const tempDir = path.join(__dirname, "../temp");
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
     try {
-        // ---------- YOUTUBE (dedicated API) ----------
+        // ---------- YOUTUBE ----------
         if (url.includes("youtube.com") || url.includes("youtu.be")) {
             let qualities = ["720p", "480p", "360p"];
             let success = false;
@@ -94,22 +100,20 @@ ${m.prefix}aio https://www.facebook.com/...`);
 
                         await m.reply(`📹 *${title}* (${selectedQuality} | ${Math.round(duration/60)} min)\n⬇️ Downloading...`);
 
-                        const videoRes = await axios.get(downloadUrl, {
-                            responseType: 'arraybuffer',
-                            timeout: 90000,
-                            headers: { 'User-Agent': 'Mozilla/5.0' },
-                            maxRedirects: 5
-                        });
+                        const videoRes = await axios.get(downloadUrl, { responseType: 'arraybuffer', timeout: 90000 });
                         let buffer = Buffer.from(videoRes.data);
+                        
+                        // YouTube videos also convert to ensure compatibility
+                        try {
+                            buffer = await convertToPhoneCompatible(buffer);
+                        } catch (convErr) {
+                            console.warn("YouTube conversion failed, sending original:", convErr.message);
+                        }
+                        
                         const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-                        const caption = `🎬 *YouTube*\n📹 *${title}*\n👤 *${author}*\n🎚️ *Quality:* ${selectedQuality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *Downloaded via WhiteShadow API*`;
+                        const caption = `🎬 *YouTube*\n📹 *${title}*\n👤 *${author}*\n🎚️ *Quality:* ${selectedQuality}\n📦 *Size:* ${fileSizeMB} MB\n🎧 *Audio optimized for phone*`;
 
-                        await client.sendMessage(m.jid, {
-                            video: buffer,
-                            caption: caption,
-                            mimetype: "video/mp4"
-                        }, { quoted: m });
-
+                        await client.sendMessage(m.jid, { video: buffer, caption: caption, mimetype: "video/mp4" }, { quoted: m });
                         await m.react("✅");
                         await m.reply(`✅ *Download complete!* (${fileSizeMB} MB)`);
                         success = true;
@@ -123,7 +127,7 @@ ${m.prefix}aio https://www.facebook.com/...`);
             return;
         }
 
-        // ---------- OTHER PLATFORMS ----------
+        // ---------- OTHER PLATFORMS (TikTok, Instagram, FB, Twitter, etc.) ----------
         const aioApiUrl = `${AIO_API_BASE}?url=${encodeURIComponent(url)}&apitoken=${API_TOKEN}`;
         const response = await axios.get(aioApiUrl, { timeout: 20000 });
         const data = response.data;
@@ -137,7 +141,7 @@ ${m.prefix}aio https://www.facebook.com/...`);
             throw new Error("No media found");
         }
 
-        // Select best video (no watermark, highest quality)
+        // TikTok: prefer hd_no_watermark > no_watermark > highest resolution
         let bestVideo = null;
         let bestAudio = null;
         for (const media of result.medias) {
@@ -159,32 +163,18 @@ ${m.prefix}aio https://www.facebook.com/...`);
 
         await m.reply(`✅ *${title}* by @${author}\n🎚️ *Quality:* ${quality}\n⬇️ Downloading video...`);
 
-        let videoRes = await axios.get(videoUrl, {
-            responseType: 'arraybuffer',
-            timeout: 60000,
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            maxRedirects: 5
-        });
+        let videoRes = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 60000 });
         let buffer = Buffer.from(videoRes.data);
 
-        // ---- Facebook videos often have audio codec issues - convert to compatible format ----
-        let isFacebook = url.includes("facebook.com") || url.includes("fb.watch");
-        let finalBuffer = buffer;
-        let finalSize = (buffer.length / (1024 * 1024)).toFixed(2);
-
+        // Facebook videos often need audio conversion
+        const isFacebook = url.includes("facebook.com") || url.includes("fb.watch");
         if (isFacebook) {
-            await m.reply(`🎧 *Facebook video detected. Converting audio to compatible format...*`);
-            const outputPath = path.join(tempDir, `converted_${Date.now()}.mp4`);
             try {
-                await convertToCompatible(buffer, outputPath);
-                finalBuffer = fs.readFileSync(outputPath);
-                finalSize = (finalBuffer.length / (1024 * 1024)).toFixed(2);
-                fs.unlinkSync(outputPath);
-                await m.reply(`✅ *Conversion successful!*`);
+                await m.reply(`🎧 *Converting audio for phone compatibility...*`);
+                buffer = await convertToPhoneCompatible(buffer);
             } catch (convErr) {
-                console.error("Conversion error:", convErr);
-                // Fallback: send original as document
-                await m.reply(`⚠️ *Could not convert audio. Sending as document.*`);
+                console.error("Facebook conversion error:", convErr);
+                await m.reply(`⚠️ *Audio conversion failed. Sending as document.*`);
                 await client.sendMessage(m.jid, {
                     document: buffer,
                     mimetype: "video/mp4",
@@ -194,25 +184,25 @@ ${m.prefix}aio https://www.facebook.com/...`);
                 await m.react("✅");
                 return;
             }
+        } else {
+            // For other platforms (TikTok, Instagram) also try conversion to be safe
+            try {
+                buffer = await convertToPhoneCompatible(buffer);
+            } catch (convErr) {
+                console.warn("Conversion skipped for non-Facebook video:", convErr.message);
+            }
         }
 
-        const caption = `🌐 *${title}*\n👤 *Author:* ${author}\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${finalSize} MB${isFacebook ? "\n🎧 *Audio converted to compatible format*" : ""}\n\n> *AIO Downloader*`;
+        const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
+        const caption = `🌐 *${title}*\n👤 *Author:* ${author}\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n🎧 *Audio optimized for phone*\n\n> *AIO Downloader*`;
 
-        await client.sendMessage(m.jid, {
-            video: finalBuffer,
-            caption: caption,
-            mimetype: "video/mp4"
-        }, { quoted: m });
+        await client.sendMessage(m.jid, { video: buffer, caption: caption, mimetype: "video/mp4" }, { quoted: m });
 
-        // Send audio separately if available (for TikTok, etc.)
+        // Send audio separately for TikTok (if exists and not Facebook)
         if (bestAudio && bestAudio.url && !isFacebook) {
             const audioRes = await axios.get(bestAudio.url, { responseType: 'arraybuffer' });
             const audioBuffer = Buffer.from(audioRes.data);
-            await client.sendMessage(m.jid, {
-                audio: audioBuffer,
-                mimetype: "audio/mpeg",
-                ptt: false
-            }, { quoted: m });
+            await client.sendMessage(m.jid, { audio: audioBuffer, mimetype: "audio/mpeg", ptt: false }, { quoted: m });
         }
 
         await m.react("✅");
@@ -221,8 +211,7 @@ ${m.prefix}aio https://www.facebook.com/...`);
     } catch (error) {
         console.error("AIO error:", error);
         await m.react("❌");
-        let errorMsg = `❌ *Download failed*\n\n`;
-        errorMsg += `Error: ${error.message.substring(0, 150)}`;
+        let errorMsg = `❌ *Download failed*\n\nError: ${error.message.substring(0, 150)}`;
         await m.reply(errorMsg);
     }
 });
