@@ -23,7 +23,7 @@ Sparky({
 }, async ({ client, m, args }) => {
     let url = getQuery(args);
     if (!url) {
-        return m.reply(`🌐 *All-in-One Downloader*
+        return m.reply(`🌐 *All-in-One Downloader by _*👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥*_*
 
 *Usage:* ${m.prefix}aio <link>
 *Examples:*
@@ -70,7 +70,7 @@ ${m.prefix}aio https://www.instagram.com/p/xxxxx`);
                         });
                         const buffer = Buffer.from(videoRes.data);
                         const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-                        const caption = `🎬 *YouTube*\n📹 *${title}*\n👤 *${author}*\n🎚️ *Quality:* ${selectedQuality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *Downloaded via WhiteShadow API*`;
+                        const caption = `🎬 *YouTube*\n📹 *${title}*\n👤 *${author}*\n🎚️ *Quality:* ${selectedQuality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *Download via_*👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥*_*`;
 
                         await client.sendMessage(m.jid, {
                             video: buffer,
@@ -129,7 +129,7 @@ ${m.prefix}aio https://www.instagram.com/p/xxxxx`);
         const title = result.title || "Media";
         const author = result.author || result.unique_id || "Unknown";
 
-        await m.reply(`✅ *${title}* by @${author}\n🎚️ *Quality:* ${quality}\n⬇️ Downloading video...`);
+        await m.reply(`✅ *${title}* by @${author}\n🎚️ *Quality:* ${quality}\n⬇️ Downloading video..._*👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥*_`);
 
         const videoRes = await axios.get(videoUrl, {
             responseType: 'arraybuffer',
@@ -139,7 +139,7 @@ ${m.prefix}aio https://www.instagram.com/p/xxxxx`);
         });
         const buffer = Buffer.from(videoRes.data);
         const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-        const caption = `🌐 *${title}*\n👤 *Author:* ${author}\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *AIO Downloader*`;
+        const caption = `🌐 *${title}*\n👤 *Author:* ${author}\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *_*👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥*_ Downloader*`;
 
         await client.sendMessage(m.jid, {
             video: buffer,
