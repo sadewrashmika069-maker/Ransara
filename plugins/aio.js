@@ -18,7 +18,7 @@ Sparky({
     alias: ["alldl", "multidownload"],
     category: "download",
     fromMe: isPublic,
-    desc: "🌐 Download media from TikTok, Instagram, YouTube, Twitter, Facebook, etc."
+    desc: "🌐 Download video/audio from TikTok, Instagram, YouTube, Twitter, Facebook, etc."
 }, async ({ client, m, args }) => {
     let url = getQuery(args);
     if (!url) {
@@ -36,85 +36,85 @@ Sparky({
 
     try {
         const apiUrl = `${API_BASE}?url=${encodeURIComponent(url)}&apitoken=${API_TOKEN}`;
-        console.log(`[AIO] Requesting: ${apiUrl}`);
         const response = await axios.get(apiUrl, { timeout: 20000 });
+        const data = response.data;
 
-        console.log(`[AIO] Full API response:`, JSON.stringify(response.data, null, 2));
-
-        // Check if response indicates error
-        if (!response.data || response.data.Status === false) {
-            throw new Error(response.data?.Error || "API returned failure status");
+        if (!data || data.Status !== true || data.Code !== 200) {
+            throw new Error(data?.Error || "API returned failure");
         }
 
-        const result = response.data.Result;
-        if (!result) {
-            throw new Error("Result object is missing");
+        const result = data.Result;
+        if (!result || result.type !== "multiple" || !result.medias || result.medias.length === 0) {
+            throw new Error("No media found in response");
         }
 
-        // Try to find download URL (different possible field names)
-        let downloadUrl = result.download_url || result.url || result.link || result.downloadLink || result.video_url;
-        let title = result.title || result.filename || "Media";
-        let quality = result.quality || result.resolution || "HD";
-        let type = result.type || (downloadUrl?.match(/\.(mp4|mkv)/i) ? "video" : "image");
+        // Find best video (prefer hd_no_watermark > no_watermark > highest resolution)
+        let bestVideo = null;
+        let bestAudio = null;
 
-        if (!downloadUrl) {
-            // If there's a list of videos, pick the highest quality
-            if (result.videos && result.videos.length > 0) {
-                const best = result.videos.reduce((a, b) => (a.resolution > b.resolution ? a : b));
-                downloadUrl = best.url || best.link;
-                quality = best.resolution || "HD";
-            } else if (result.medias && result.medias.length > 0) {
-                const best = result.medias[result.medias.length - 1];
-                downloadUrl = best.url || best.link;
-                quality = best.quality || "HD";
+        for (const media of result.medias) {
+            if (media.type === "video") {
+                if (!bestVideo) bestVideo = media;
+                else if (media.quality === "hd_no_watermark" && bestVideo.quality !== "hd_no_watermark") bestVideo = media;
+                else if (media.quality === "no_watermark" && bestVideo.quality !== "hd_no_watermark") bestVideo = media;
+                else if (media.width * media.height > bestVideo.width * bestVideo.height) bestVideo = media;
+            } else if (media.type === "audio") {
+                bestAudio = media;
             }
         }
 
-        if (!downloadUrl) {
-            throw new Error("No download URL found in response. Full response logged.");
-        }
+        if (!bestVideo) throw new Error("No video URL found");
 
-        await m.reply(`✅ *${title}* (${quality})\n⬇️ Downloading file...`);
+        const videoUrl = bestVideo.url;
+        const quality = bestVideo.quality || "HD";
+        const title = result.title || "Media";
+        const author = result.author || result.unique_id || "Unknown";
 
-        const fileRes = await axios.get(downloadUrl, {
+        await m.reply(`✅ *${title}* by @${author}\n🎚️ *Quality:* ${quality}\n⬇️ Downloading video...`);
+
+        // Download video as arraybuffer
+        const videoRes = await axios.get(videoUrl, {
             responseType: 'arraybuffer',
-            timeout: 90000,
+            timeout: 60000,
             headers: { 'User-Agent': 'Mozilla/5.0' },
             maxRedirects: 5
         });
 
-        const buffer = Buffer.from(fileRes.data);
+        const buffer = Buffer.from(videoRes.data);
         const fileSizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
-        if (buffer.length < 5000) throw new Error("File too small");
+        if (buffer.length < 5000) throw new Error("Video too small");
 
-        let ext = ".mp4";
-        let mimetype = "video/mp4";
-        if (downloadUrl.match(/\.(jpg|jpeg|png|gif)/i)) {
-            ext = ".jpg";
-            mimetype = "image/jpeg";
-        } else if (downloadUrl.match(/\.(mp3|m4a|wav)/i)) {
-            ext = ".mp3";
-            mimetype = "audio/mpeg";
-        }
-        const fileName = `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}${ext}`;
-        const caption = `🌐 *${title}*\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *AIO Downloader*`;
+        const fileName = `${title.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.mp4`;
+        const caption = `🌐 *${title}*\n👤 *Author:* ${author}\n🎚️ *Quality:* ${quality}\n📦 *Size:* ${fileSizeMB} MB\n\n> *AIO Downloader*`;
 
+        // Send as video (not document) for phone compatibility
         await client.sendMessage(m.jid, {
-            document: buffer,
-            mimetype: mimetype,
-            fileName: fileName,
-            caption: caption
+            video: buffer,
+            caption: caption,
+            mimetype: "video/mp4"
         }, { quoted: m });
 
+        // Optionally send audio as a separate message
+        if (bestAudio && bestAudio.url) {
+            const audioRes = await axios.get(bestAudio.url, { responseType: 'arraybuffer' });
+            const audioBuffer = Buffer.from(audioRes.data);
+            const audioCaption = `🎵 *Audio: ${title}*`;
+            await client.sendMessage(m.jid, {
+                audio: audioBuffer,
+                mimetype: "audio/mpeg",
+                ptt: false
+            }, { quoted: m });
+        }
+
         await m.react("✅");
-        await m.reply(`✅ *Download complete!*`);
+        await m.reply(`✅ *Download complete!* (${fileSizeMB} MB)`);
 
     } catch (error) {
         console.error("AIO error:", error);
         await m.react("❌");
         let errorMsg = `❌ *Download failed*\n\n`;
-        if (error.message.includes("Invalid")) {
-            errorMsg += `The link is invalid or platform not supported.`;
+        if (error.message.includes("Invalid") || error.message.includes("No media")) {
+            errorMsg += `Unsupported link or platform.\nSupported: TikTok, Instagram, YouTube, Twitter, Facebook, etc.`;
         } else {
             errorMsg += `Error: ${error.message.substring(0, 150)}`;
         }
