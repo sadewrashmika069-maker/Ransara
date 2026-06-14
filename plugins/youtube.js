@@ -42,7 +42,7 @@ async function coreAudioDownloader({ m, client, args }) {
         textInput = textInput || m.quoted?.text || "";
 
         if (!textInput) {
-            return await sendMsg("🎵 කරුණාකර සින්දුවක නමක් හෝ YouTube ලින්ක් එකක් (PC/Mobile) ලබා දෙන්න.\n\n💡 උදා: `.music master sir` හෝ `.music <link>`");
+            return await sendMsg("🎵 කරුණාකර සින්දුවක නමක් හෝ YouTube ලින්ක් එකක් ලබා දෙන්න.\n\n💡 උදා: `.music master sir` හෝ `.music <link> හෝ `.song mithaya mayam`");
         }
 
         try { if (typeof m.react === "function") await m.react("🔎"); } catch {}
@@ -83,7 +83,7 @@ async function coreAudioDownloader({ m, client, args }) {
         }
 
         // 2. 320kbps MP3 ලින්ක් එක ලබාගැනීම (WhiteShadow YTMP3 API)
-        await sendMsg("📥 _Extracting 320kbps High-Quality MP3 stream..._");
+        await sendMsg("📥 _ _*👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥*_ Extracting 320kbps High-Quality MP3 stream..._");
         console.log(`[SADEW-MD MUSIC] Triggering Downloader for: ${youtubeUrl}`);
 
         let audioDownloadUrl = null;
@@ -113,7 +113,7 @@ async function coreAudioDownloader({ m, client, args }) {
         // 3. WhatsApp Audio පණිවිඩයක් ලෙස ජංගම දුරකථනයට යැවීම
         const cleanFileName = finalTitle.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) + ".mp3";
         
-        await sendMsg(`✨ *Sadew-MD Music System* ✨\n\n📌 *Title:* ${finalTitle}\n💿 *Quality:* 320kbps Ultra-HQ\n🚀 *Status:* Mobile-Optimized`);
+        await sendMsg(`✨ *_👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥_ Music System* ✨\n\n📌 *Title:* ${finalTitle}\n💿 *Quality:* 320kbps Ultra-High Quality\n🚀 *Status:* download via ~*👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥*~`);
 
         await client.sendMessage(
             m.jid,
