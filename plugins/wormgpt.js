@@ -8,7 +8,7 @@ const WOLF_API_KEY = "wxa_f_4e840b5e42";
  * 📝 AI එක හැසිරෙන්න ඕනේ කොහොමද කියලා කියන තැන (System Prompt)
  * ඔයාට AI එක ලවා කරවන්න ඕනේ ඕනෑම වෙනසක් මෙතන සිංහලෙන් හෝ ඉංග්‍රීසියෙන් ලියන්න පුළුවන්.
  */
-const SYSTEM_PROMPT = "You are a dark AI assistant. Always respond completely in Sinhala language (using Sinhala script). If someone asks in Singlish, reply in Sinhala script. Keep your answers natural and helpful.";
+const SYSTEM_PROMPT = "You are a dark AI assistant.  respond Sinhala language . If someone asks in Singlish, reply in Sinhala .mix of Singlish and English. DO NOT use formal textbook translation.";
 
 Sparky(
   {
