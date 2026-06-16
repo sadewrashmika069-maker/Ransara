@@ -7,42 +7,77 @@ if (!global.animeSessions) global.animeSessions = new Map();
 const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
 const POWERED_BY = "Powered by sadew rashmika";
 
-// ---------- GOOGLE DRIVE DOWNLOADER FUNCTION (gdrive.js logic) ----------
+// ---------- GOOGLE DRIVE DOWNLOADER ----------
 const GDRIVE_API_TOKEN = "VK4fry";
 const GDRIVE_API_BASE = "https://whiteshadow-x-api.onrender.com/api/download/gdrive";
 
 async function downloadGoogleDrive(driveUrl) {
     try {
+        // 1. WhiteShadow API එකට ඉල්ලීම
         const apiUrl = `${GDRIVE_API_BASE}?url=${encodeURIComponent(driveUrl)}&apitoken=${GDRIVE_API_TOKEN}`;
         const response = await axios.get(apiUrl, { timeout: 20000 });
         const data = response.data;
 
         if (!data || data.success !== true) {
-            throw new Error(data?.error || "API error");
+            throw new Error(data?.error || "Google Drive API error");
         }
 
+        // 2. බාගැනීම් සබැඳිය උපුටා ගන්න
         let downloadUrl = data.downloadUrl || data.download_url || data.url || null;
-        const fileName = data.fileName || data.file_name || data.filename || "gdrive_file";
 
-        if (!downloadUrl) throw new Error("No download URL received");
+        if (!downloadUrl) {
+            // API එකෙන් URL එකක් නැතිනම්, file ID එක භාවිතා කර සෘජු සබැඳියක් ගොඩනගන්න
+            const fileId = driveUrl.match(/\/file\/d\/([^\/]+)/)?.[1] || 
+                           driveUrl.match(/[?&]id=([^&]+)/)?.[1];
+            if (fileId) {
+                downloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+            }
+        }
 
-        // Download the actual file
+        if (!downloadUrl) throw new Error("No download URL found");
+
+        // 3. සැබෑ ගොනුව බාගත කිරීම
         const fileRes = await axios.get(downloadUrl, {
             responseType: 'arraybuffer',
             timeout: 180000,
-            headers: { 'User-Agent': 'Mozilla/5.0' },
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': '*/*'
+            },
             maxRedirects: 5
         });
 
+        const buffer = Buffer.from(fileRes.data);
         const contentType = fileRes.headers['content-type'] || '';
+
+        // HTML පිටුවක් ලැබුණොත් (විශාල ගොනු සඳහා)
         if (contentType.includes('text/html')) {
-            throw new Error("Received HTML instead of file.");
+            const preview = buffer.slice(0, 1500).toString();
+            if (preview.includes('quota') || preview.includes('limit')) {
+                throw new Error("Download quota exceeded. Try again later.");
+            }
+            // HTML ලැබුණත්, එය Google Drive හි confirm පිටුවක් විය හැක.
+            // අපි එම පිටුවෙන් confirm පරාමිතිය උකහාගෙන නැවත උත්සාහ කරමු.
+            const confirmMatch = preview.match(/confirm=([^&"']+)/);
+            if (confirmMatch && downloadUrl.includes('drive.usercontent.google.com')) {
+                const newUrl = downloadUrl.replace(/&confirm=t/, `&confirm=${confirmMatch[1]}`);
+                const retryRes = await axios.get(newUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 180000,
+                    headers: { 'User-Agent': 'Mozilla/5.0' }
+                });
+                const retryBuffer = Buffer.from(retryRes.data);
+                if (retryBuffer.length > 10000) {
+                    return { buffer: retryBuffer, fileName: data.fileName || data.file_name || 'file.mp4', size: (retryBuffer.length / (1024 * 1024)).toFixed(2) };
+                }
+            }
+            throw new Error("Received HTML instead of file. Link may require manual download.");
         }
 
-        const buffer = Buffer.from(fileRes.data);
-        if (buffer.length < 10000) throw new Error("File too small");
-        if (buffer.length > 2000 * 1024 * 1024) throw new Error("File exceeds 2GB");
+        if (buffer.length < 10000) throw new Error(`File too small (${buffer.length} bytes)`);
+        if (buffer.length > 2000 * 1024 * 1024) throw new Error("File exceeds 2GB WhatsApp limit");
 
+        const fileName = data.fileName || data.file_name || data.filename || 'gdrive_file.mp4';
         return { buffer, fileName, size: (buffer.length / (1024 * 1024)).toFixed(2) };
     } catch (err) {
         throw new Error(`GDrive: ${err.message}`);
@@ -313,7 +348,7 @@ async function fetchAnimeQualityOptions(client, m, selectedAnime) {
 }
 
 // ==========================================
-// 5. DOWNLOAD & SEND FUNCTION (WITH GDRIVE INTEGRATION)
+// 5. DOWNLOAD & SEND FUNCTION (FIXED GOOGLE DRIVE)
 // ==========================================
 async function downloadAndSendAnime(client, m, finalUrl, qualityStr, animeTitle) {
     const metaQuote = getMetaQuote();
@@ -327,9 +362,9 @@ async function downloadAndSendAnime(client, m, finalUrl, qualityStr, animeTitle)
             await m.reply(`🔄 *Google Drive file detected!*\n_Downloading via GDrive API..._`);
 
             try {
-                // Use the GDrive downloader function
                 const result = await downloadGoogleDrive(finalUrl);
                 
+                // ගොනුවේ extension එක හඳුනාගන්න
                 const ext = result.fileName.split('.').pop().toLowerCase() || 'mp4';
                 const extMimeMap = {
                     'apk': 'application/vnd.android.package-archive',
@@ -340,7 +375,8 @@ async function downloadAndSendAnime(client, m, finalUrl, qualityStr, animeTitle)
                     'jpg': 'image/jpeg',
                     'png': 'image/png',
                     'pdf': 'application/pdf',
-                    'zip': 'application/zip'
+                    'zip': 'application/zip',
+                    'srt': 'text/plain'
                 };
                 const mimetype = extMimeMap[ext] || 'video/mp4';
 
@@ -366,7 +402,7 @@ async function downloadAndSendAnime(client, m, finalUrl, qualityStr, animeTitle)
             }
         }
 
-        // ---------- NON-GOOGLE DRIVE LINKS (Direct download) ----------
+        // ---------- NON-GOOGLE DRIVE LINKS ----------
         await m.reply(`📥 *Uploading Anime:* ${animeTitle}\n⚙️ *Quality:* ${qualityStr}\n\n_WhatsApp වෙත Upload වෙමින් පවතී. කරුණාකර රැඳී සිටින්න..._`);
 
         const caption = `🎌 *${animeTitle}*\n⚙️ *Quality:* ${qualityStr}\n\n*${BOT_NAME}*\n_${POWERED_BY}_`;
