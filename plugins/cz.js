@@ -4,9 +4,11 @@ const axios = require("axios");
 
 if (!global.cinesubzSessions) global.cinesubzSessions = new Map();
 
+// බොට් බ්‍රෑන්ඩින්ග් විස්තර
 const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
 const POWERED_BY = "Powered by sadew rashmika";
 
+// Fake Quote එකක් සැකසීමට පොදු ෆන්ක්ෂන් එකක්
 function getMetaQuote() {
     return {
         key: { remoteJid: "status@broadcast", participant: "0@s.whatsapp.net", fromMe: false, id: "SADEW_X_MD" },
@@ -14,6 +16,7 @@ function getMetaQuote() {
     };
 }
 
+// පින්තූරයක් හෝ ටෙක්ස්ට් එකක් බිඳෙන්නේ නැතිව යැවීමට සකසන ලද සේෆ් ෆන්ක්ෂන් එකක්
 async function sendMediaOrText(client, jid, text, imageUrl, quoted) {
     if (imageUrl) {
         try {
@@ -147,12 +150,21 @@ for (let j = 1; j <= 3; j++) {
             if (j === 2) qualityKey = "720p";
             if (j === 3) qualityKey = "1080p";
 
-            const finalUrl = session.linksMap[qualityKey];
+            const baseLink = session.baseLink;
             const movieTitle = session.movieTitle;
 
-            // සයිට් එකේ ඇත්තටම ලින්ක් එක නැත්නම් මැසේජ් එකක් දෙනවා සිලෙක්ට් කරන්න නොදී
-            if (!finalUrl) {
-                return await m.reply(`❌ සමාවෙන්න, මෙම චිත්‍රපටය සඳහා *${qualityKey}* Quality එක වෙබ් අඩවියේ ලබා දීමට නැත. කරුණාකර මෙනුවේ ඇති වෙනත් Quality එකක් තෝරන්න.`);
+            if (!baseLink) {
+                return await m.reply(`❌ සමාවෙන්න, බාගැනීම් සබැඳියක් හමු නොවීය.`);
+            }
+
+            // පරණ ක්‍රමයටම URL එකේ අකුරු මාරු කරලා Quality එක වෙනස් කිරීම
+            let finalUrl = baseLink;
+            if (qualityKey === '480p') {
+                finalUrl = baseLink.replace(/(720p|1080p|1080|720)/gi, '480p');
+            } else if (qualityKey === '720p') {
+                finalUrl = baseLink.replace(/(480p|1080p|1080|480)/gi, '720p');
+            } else if (qualityKey === '1080p') {
+                finalUrl = baseLink.replace(/(480p|720p|480|720)/gi, '1080p');
             }
 
             global.cinesubzSessions.delete(m.sender);
@@ -185,50 +197,27 @@ async function fetchQualityOptions(client, m, selectedMovie) {
             return await m.reply(`❌ මෙම චිත්‍රපටය සඳහා බාගැනීම් සබැඳි (Links) හමු නොවිණි.`);
         }
 
-        const linksMap = {
-            "480p": null,
-            "720p": null,
-            "1080p": null
-        };
+        // API එකෙන් එන ප්‍රධාන ලින්ක් එක අල්ලා ගැනීම
+        const directVideo = data.data.find(v => v.is_direct_mp4) || data.data[0];
+        const baseLink = directVideo.link;
 
-        // ඇත්තටම තියෙන ඒව විතරක් Map කරගන්නවා
-        data.data.forEach(linkObj => {
-            const qStr = (linkObj.quality || linkObj.resolution || "").toLowerCase();
-            if (qStr.includes("480")) linksMap["480p"] = linkObj.link;
-            else if (qStr.includes("720")) linksMap["720p"] = linkObj.link;
-            else if (qStr.includes("1080")) linksMap["1080p"] = linkObj.link;
-        });
-
-        // කිසිම Specific Quality එකක් නැතිව එකම එක ලින්ක් එකක් විතරක් ආවොත් ඒක 720p වලට දානවා
-        const fallbackLink = (data.data.find(v => v.is_direct_mp4) || data.data[0])?.link;
-        if (!linksMap["480p"] && !linksMap["720p"] && !linksMap["1080p"]) {
-            linksMap["720p"] = fallbackLink;
+        if (!baseLink) {
+            await m.react("❌");
+            return await m.reply(`❌ බාගත හැකි මට්ටමේ කිසිදු ලින්ක් එකක් හමු නොවිණි.`);
         }
 
-        // මැසේජ් එක ඩයිනමික් ලෙස නිර්මාණය කිරීම (ඇති ඒවා පමණක් පෙන්වීමට)
-        let qualMsg = `🎬 *${title}*\n\n📥 *වෙබ් අඩවියේ ඇති බාගත කිරීම් විකල්ප:*\n\n`;
-        let availableCount = 0;
-
-        if (linksMap["480p"]) {
-            qualMsg += `🟢 *480p* (SD Quality) ➡️ 📥 *.m1*\n`;
-            availableCount++;
-        }
-        if (linksMap["720p"]) {
-            qualMsg += `🟢 *720p* (HD Quality) ➡️ 📥 *.m2*\n`;
-            availableCount++;
-        }
-        if (linksMap["1080p"]) {
-            qualMsg += `🟢 *1080p* (Full HD) ➡️ 📥 *.m3*\n`;
-            availableCount++;
-        }
-
-        qualMsg += `\n📌 *බාගැනීමට අදාළ කමාන්ඩ් එක දෙන්න.*`;
+        // හැම ෆිල්ම් එකකටම Quality 3ම පෙන්වමු
+        let qualMsg = `🎬 *${title}*\n\n📥 *ඔබට අවශ්‍ය Quality එක තෝරන්න:*\n\n`;
+        qualMsg += `🟢 *480p* (SD Quality) ➡️ 📥 *.m1*\n`;
+        qualMsg += `🟢 *720p* (HD Quality) ➡️ 📥 *.m2*\n`;
+        qualMsg += `🟢 *1080p* (Full HD) ➡️ 📥 *.m3*\n\n`;
+        qualMsg += `📌 *බාගැනීමට කමාන්ඩ් එක දෙන්න:* .m1, .m2 හෝ .m3`;
 
         await sendMediaOrText(client, m.jid, qualMsg, movieImg, m);
 
         global.cinesubzSessions.set(m.sender, {
             step: "awaiting_quality",
-            linksMap: linksMap,
+            baseLink: baseLink, // ප්‍රධාන ලින්ක් එක සේව් කර තබයි
             movieTitle: title,
             timestamp: Date.now()
         });
@@ -281,6 +270,6 @@ async function downloadAndSendMovie(client, m, finalUrl, qualityStr, movieTitle)
     } catch (err) {
         console.error("Direct Upload Error:", err);
         await m.react("❌");
-        await m.reply(`❌ බාගත කර ඔබ වෙත එවීමට අපොහොසත් විය. සර්වර් සබැඳියේ දෝෂයකි.\nError: ${err.message.substring(0, 80)}`);
+        await m.reply(`❌ බාගත කර ඔබ වෙත එවීමට අපොහොසත් විය.\n_සමහරවිට මෙම චිත්‍රපටයේ ${qualityStr} සංස්කරණයක් සර්වර් එකේ නොමැත._\n\nError: ${err.message.substring(0, 80)}`);
     }
 }
