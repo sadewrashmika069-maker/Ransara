@@ -2,7 +2,6 @@
 const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
 
-// Anime සඳහා වෙනම Session Map එකක්
 if (!global.animeSessions) global.animeSessions = new Map();
 
 const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
@@ -21,7 +20,7 @@ async function sendMediaOrText(client, jid, text, imageUrl, quoted) {
             await client.sendMessage(jid, { image: { url: imageUrl }, caption: text }, { quoted });
             return;
         } catch (e) {
-            console.error("Thumbnail sending failed, falling back to text:", e);
+            console.error("Thumbnail sending failed:", e);
         }
     }
     await client.sendMessage(jid, { text: text }, { quoted });
@@ -65,13 +64,33 @@ _${POWERED_BY}_`);
         await m.reply(`🔎 Anime Club හි සොයමින් "${query}"...`);
 
         const searchUrl = `https://animeclub-api.udmodz-2ab.workers.dev/search?q=${encodeURIComponent(query)}`;
-        const { data } = await axios.get(searchUrl, { timeout: 15000 });
+        const { data } = await axios.get(searchUrl, { 
+            headers: { "User-Agent": "Mozilla/5.0" },
+            timeout: 15000 
+        });
 
-        const resultsArray = data.data || data.result || data;
+        // 🧠 Smart Array Extraction Logic
+        let resultsArray = [];
+        if (Array.isArray(data)) {
+            resultsArray = data;
+        } else if (typeof data === 'object' && data !== null) {
+            if (Array.isArray(data.data)) resultsArray = data.data;
+            else if (Array.isArray(data.result)) resultsArray = data.result;
+            else if (Array.isArray(data.results)) resultsArray = data.results;
+            else if (Array.isArray(data.items)) resultsArray = data.items;
+            else {
+                for (const key in data) {
+                    if (Array.isArray(data[key])) {
+                        resultsArray = data[key];
+                        break;
+                    }
+                }
+            }
+        }
 
-        if (!resultsArray || !Array.isArray(resultsArray) || resultsArray.length === 0) {
+        if (!resultsArray || resultsArray.length === 0) {
             await m.react("❌");
-            return await m.reply(`❌ සමාවෙන්න, "${query}" සඳහා කිසිදු Anime එකක් හමුනොවිය.`);
+            return await m.reply(`❌ සමාවෙන්න, "${query}" සඳහා කිසිදු Anime එකක් හමුනොවිය.\n_(API එකෙන් හිස් ප්‍රතිඵලයක් ලැබුණි)_`);
         }
 
         const results = resultsArray.slice(0, 10);
@@ -84,7 +103,7 @@ _${POWERED_BY}_`);
         
         listMsg += `\n📌 *Anime එක තෝරා ගැනීමට අංකය ටයිප් කරන්න:* .<අංකය>\n*උදාහරණ:* .1 හෝ .10 දක්වා`;
 
-        const firstImg = results[0].image || results[0].img || results[0].thumbnail;
+        const firstImg = results[0].image || results[0].img || results[0].thumbnail || results[0].cover;
         await sendMediaOrText(client, m.jid, listMsg, firstImg, m);
 
         global.animeSessions.set(m.sender, {
@@ -99,7 +118,7 @@ _${POWERED_BY}_`);
     } catch (err) {
         console.error("Anime Search Error:", err);
         await m.react("❌");
-        await m.reply(`❌ සෙවීම අසාර්ථකයි: ${err.message.substring(0, 100)}`);
+        await m.reply(`❌ සෙවීම අසාර්ථකයි: ${err.message.substring(0, 80)}`);
     }
 });
 
@@ -114,7 +133,6 @@ for (let i = 1; i <= 10; i++) {
         desc: `Anime අංක ${i} තෝරා ගැනීමට.`
     }, async ({ client, m }) => {
         try {
-            // මෙතනින් Session එක තියෙනවද කියලා බලන නිසා Cinesubz එක්ක පැටලෙන්නේ නෑ
             const session = global.animeSessions.get(m.sender);
             if (!session || session.step !== "awaiting_anime") return; 
 
@@ -144,7 +162,6 @@ for (let j = 1; j <= 3; j++) {
         desc: `Anime Quality ${j} තෝරා බාගත කර ගැනීමට.`
     }, async ({ client, m }) => {
         try {
-            // Quality Session එකත් Check කරනවා
             const session = global.animeSessions.get(m.sender);
             if (!session || session.step !== "awaiting_anime_quality") return;
 
@@ -175,7 +192,7 @@ for (let j = 1; j <= 3; j++) {
 async function fetchAnimeQualityOptions(client, m, selectedAnime) {
     const title = selectedAnime.title || selectedAnime.name || "Anime Episode";
     const animeUrl = selectedAnime.url || selectedAnime.link;
-    const animeImg = selectedAnime.image || selectedAnime.img || selectedAnime.thumbnail;
+    const animeImg = selectedAnime.image || selectedAnime.img || selectedAnime.thumbnail || selectedAnime.cover;
 
     if (!animeUrl) {
         return await m.reply(`❌ මෙම Anime එක සඳහා වලංගු URL එකක් API එකෙන් ලබා දී නොමැත.`);
@@ -187,20 +204,27 @@ async function fetchAnimeQualityOptions(client, m, selectedAnime) {
 
     try {
         const extractUrl = `https://animeclub-api.udmodz-2ab.workers.dev/dl?url=${encodeURIComponent(animeUrl)}`;
-        const { data } = await axios.get(extractUrl, { timeout: 15000 });
+        const { data } = await axios.get(extractUrl, { 
+            headers: { "User-Agent": "Mozilla/5.0" },
+            timeout: 15000 
+        });
 
-        const dlData = data.data || data.result || data;
+        // 🧠 Smart Array Extraction for Links
+        let dlData = null;
+        if (Array.isArray(data)) {
+            dlData = data;
+        } else if (typeof data === 'object' && data !== null) {
+            dlData = data.data || data.result || data.results || data.links || data.url || data;
+        } else {
+            dlData = data; // If it's a direct string
+        }
 
         if (!dlData) {
             await m.react("❌");
             return await m.reply(`❌ මෙම Anime එක සඳහා බාගැනීම් සබැඳි හමු නොවිණි.`);
         }
 
-        const linksMap = {
-            "480p": null,
-            "720p": null,
-            "1080p": null
-        };
+        const linksMap = { "480p": null, "720p": null, "1080p": null };
 
         if (Array.isArray(dlData)) {
             dlData.forEach(linkObj => {
