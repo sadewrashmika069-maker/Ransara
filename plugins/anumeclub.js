@@ -7,6 +7,49 @@ if (!global.animeSessions) global.animeSessions = new Map();
 const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
 const POWERED_BY = "Powered by sadew rashmika";
 
+// ---------- GOOGLE DRIVE DOWNLOADER FUNCTION (gdrive.js logic) ----------
+const GDRIVE_API_TOKEN = "VK4fry";
+const GDRIVE_API_BASE = "https://whiteshadow-x-api.onrender.com/api/download/gdrive";
+
+async function downloadGoogleDrive(driveUrl) {
+    try {
+        const apiUrl = `${GDRIVE_API_BASE}?url=${encodeURIComponent(driveUrl)}&apitoken=${GDRIVE_API_TOKEN}`;
+        const response = await axios.get(apiUrl, { timeout: 20000 });
+        const data = response.data;
+
+        if (!data || data.success !== true) {
+            throw new Error(data?.error || "API error");
+        }
+
+        let downloadUrl = data.downloadUrl || data.download_url || data.url || null;
+        const fileName = data.fileName || data.file_name || data.filename || "gdrive_file";
+
+        if (!downloadUrl) throw new Error("No download URL received");
+
+        // Download the actual file
+        const fileRes = await axios.get(downloadUrl, {
+            responseType: 'arraybuffer',
+            timeout: 180000,
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            maxRedirects: 5
+        });
+
+        const contentType = fileRes.headers['content-type'] || '';
+        if (contentType.includes('text/html')) {
+            throw new Error("Received HTML instead of file.");
+        }
+
+        const buffer = Buffer.from(fileRes.data);
+        if (buffer.length < 10000) throw new Error("File too small");
+        if (buffer.length > 2000 * 1024 * 1024) throw new Error("File exceeds 2GB");
+
+        return { buffer, fileName, size: (buffer.length / (1024 * 1024)).toFixed(2) };
+    } catch (err) {
+        throw new Error(`GDrive: ${err.message}`);
+    }
+}
+
+// ---------- ANIME FUNCTIONS ----------
 function getMetaQuote() {
     return {
         key: { remoteJid: "status@broadcast", participant: "0@s.whatsapp.net", fromMe: false, id: "SADEW_X_MD" },
@@ -19,9 +62,7 @@ async function sendMediaOrText(client, jid, text, imageUrl, quoted) {
         try {
             await client.sendMessage(jid, { image: { url: imageUrl }, caption: text }, { quoted });
             return;
-        } catch (e) {
-            console.error("Thumbnail sending failed:", e);
-        }
+        } catch (e) { console.error("Thumbnail sending failed:", e); }
     }
     await client.sendMessage(jid, { text: text }, { quoted });
 }
@@ -46,7 +87,6 @@ Sparky({
 }, async ({ client, m, args }) => {
     try {
         const query = getQuery(args);
-
         if (!query) {
             return await m.reply(`🎌 *${BOT_NAME} - ANIME CLUB*
 
@@ -70,19 +110,15 @@ _${POWERED_BY}_`);
         });
 
         let resultsArray = [];
-        if (Array.isArray(data)) {
-            resultsArray = data;
-        } else if (typeof data === 'object' && data !== null) {
+        if (Array.isArray(data)) resultsArray = data;
+        else if (typeof data === 'object' && data !== null) {
             if (Array.isArray(data.data)) resultsArray = data.data;
             else if (Array.isArray(data.result)) resultsArray = data.result;
             else if (Array.isArray(data.results)) resultsArray = data.results;
             else if (Array.isArray(data.items)) resultsArray = data.items;
             else {
                 for (const key in data) {
-                    if (Array.isArray(data[key])) {
-                        resultsArray = data[key];
-                        break;
-                    }
+                    if (Array.isArray(data[key])) { resultsArray = data[key]; break; }
                 }
             }
         }
@@ -94,12 +130,10 @@ _${POWERED_BY}_`);
 
         const results = resultsArray.slice(0, 10);
         let listMsg = `🎌 *${BOT_NAME} - ANIME SEARCH*\n\n🔍 *සෙව්වේ:* ${query}\n📊 ප්‍රතිඵල ගණන: ${results.length}\n\n`;
-        
         results.forEach((anime, i) => {
             const title = anime.title || anime.name || "Unknown Title";
             listMsg += `*${i + 1}.* ${title}\n`;
         });
-        
         listMsg += `\n📌 *Anime එක තෝරා ගැනීමට අංකය ටයිප් කරන්න:* .<අංකය>\n*උදාහරණ:* .1 හෝ .10 දක්වා`;
 
         const firstImg = results[0].image || results[0].img || results[0].thumbnail || results[0].cover;
@@ -110,7 +144,6 @@ _${POWERED_BY}_`);
             results: results,
             timestamp: Date.now()
         });
-        
         setTimeout(() => global.animeSessions.delete(m.sender), 5 * 60 * 1000);
         await m.react("✅");
 
@@ -133,7 +166,7 @@ for (let i = 1; i <= 10; i++) {
     }, async ({ client, m }) => {
         try {
             const session = global.animeSessions.get(m.sender);
-            if (!session || session.step !== "awaiting_anime") return; 
+            if (!session || session.step !== "awaiting_anime") return;
 
             const idx = i - 1;
             if (idx < 0 || idx >= session.results.length) {
@@ -142,7 +175,6 @@ for (let i = 1; i <= 10; i++) {
 
             const selectedAnime = session.results[idx];
             global.animeSessions.delete(m.sender);
-            
             await fetchAnimeQualityOptions(client, m, selectedAnime);
         } catch (err) {
             console.error(`Error in anime numeric command .${i}:`, err);
@@ -177,7 +209,6 @@ for (let j = 1; j <= 3; j++) {
             }
 
             global.animeSessions.delete(m.sender);
-
             await downloadAndSendAnime(client, m, finalUrl, qualityKey, animeTitle);
         } catch (err) {
             console.error(`Error in anime quality command .m${j}:`, err);
@@ -215,7 +246,6 @@ async function fetchAnimeQualityOptions(client, m, selectedAnime) {
             if (typeof obj === 'object' && obj !== null) {
                 let qStr = (obj.quality || obj.resolution || obj.name || "").toLowerCase();
                 let url = obj.url || obj.link || obj.download || obj.file || obj.direct_link;
-                
                 if (qStr && url && typeof url === 'string' && url.startsWith('http')) {
                     if (qStr.includes("480")) { linksMap["480p"] = url; foundExplicit = true; }
                     if (qStr.includes("720")) { linksMap["720p"] = url; foundExplicit = true; }
@@ -237,7 +267,6 @@ async function fetchAnimeQualityOptions(client, m, selectedAnime) {
                     if (obj.download_link && typeof obj.download_link === 'string') return obj.download_link;
                     if (obj.direct_link && typeof obj.direct_link === 'string') return obj.direct_link;
                     if (obj.url && typeof obj.url === 'string' && !obj.url.match(/\.(jpg|png)/i)) return obj.url;
-                    
                     for (let key in obj) {
                         let link = getAnyLink(obj[key]);
                         if (link) return link;
@@ -273,7 +302,6 @@ async function fetchAnimeQualityOptions(client, m, selectedAnime) {
             animeTitle: title,
             timestamp: Date.now()
         });
-        
         setTimeout(() => global.animeSessions.delete(m.sender), 5 * 60 * 1000);
         await m.react("🎬");
 
@@ -285,52 +313,77 @@ async function fetchAnimeQualityOptions(client, m, selectedAnime) {
 }
 
 // ==========================================
-// 5. DOWNLOAD & DIRECT SEND FUNCTION (WITH WS API BYPASS)
+// 5. DOWNLOAD & SEND FUNCTION (WITH GDRIVE INTEGRATION)
 // ==========================================
 async function downloadAndSendAnime(client, m, finalUrl, qualityStr, animeTitle) {
+    const metaQuote = getMetaQuote();
+    const safeTitle = animeTitle.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+
     try {
         await m.react("⬇️");
-        const metaQuote = getMetaQuote();
-        let downloadUrl = finalUrl;
 
-        // 🧠 WhiteShadow API Google Drive Bypass Logic
-        if (finalUrl.includes("drive.google.com")) {
-            await m.reply(`🔄 Google Drive ගොනුවක් හඳුනාගත්තා!\n_WhiteShadow API හරහා Direct Link එක ලබාගනිමින්..._`);
+        // 🔥 CHECK IF IT'S A GOOGLE DRIVE LINK
+        if (finalUrl.includes("drive.google.com") || finalUrl.includes("drive.usercontent.google.com")) {
+            await m.reply(`🔄 *Google Drive file detected!*\n_Downloading via GDrive API..._`);
+
             try {
-                const wsApiUrl = `https://whiteshadow-x-api.onrender.com/api/download/gdrive?url=${encodeURIComponent(finalUrl)}&apitoken=VK4fry`;
-                const wsRes = await axios.get(wsApiUrl, { timeout: 20000 });
-                const wsData = wsRes.data;
+                // Use the GDrive downloader function
+                const result = await downloadGoogleDrive(finalUrl);
+                
+                const ext = result.fileName.split('.').pop().toLowerCase() || 'mp4';
+                const extMimeMap = {
+                    'apk': 'application/vnd.android.package-archive',
+                    'mp4': 'video/mp4',
+                    'mkv': 'video/x-matroska',
+                    'avi': 'video/x-msvideo',
+                    'mp3': 'audio/mpeg',
+                    'jpg': 'image/jpeg',
+                    'png': 'image/png',
+                    'pdf': 'application/pdf',
+                    'zip': 'application/zip'
+                };
+                const mimetype = extMimeMap[ext] || 'video/mp4';
 
-                if (wsData && wsData.success !== false) {
-                    // API එකෙන් එන JSON එකේ කොහේ හරි ලින්ක් එක තිබ්බොත් ඒක ගන්නවා
-                    downloadUrl = wsData.downloadUrl || wsData.url || wsData.link || wsData.download || 
-                                 (wsData.data && (wsData.data.url || wsData.data.downloadUrl)) || 
-                                 (wsData.result && (wsData.result.url || wsData.result.downloadUrl)) || 
-                                 finalUrl;
-                }
-            } catch (wsErr) {
-                console.error("WhiteShadow API Error:", wsErr);
-                // API එක අවුල් ගියොත් පරණ ලින්ක් එකෙන්ම ට්‍රයි කරනවා
+                const caption = `🎌 *${animeTitle}*\n⚙️ *Quality:* ${qualityStr}\n📦 *Size:* ${result.size} MB\n\n*${BOT_NAME}*\n_${POWERED_BY}_`;
+
+                await client.sendMessage(m.jid, {
+                    document: result.buffer,
+                    mimetype: mimetype,
+                    fileName: `${safeTitle} - ${qualityStr}.${ext}`,
+                    caption: caption
+                }, { quoted: metaQuote });
+
+                await m.react("✅");
+                await m.reply(`✅ *Download complete!* (${result.size} MB)`);
+                return;
+            } catch (gdriveErr) {
+                console.error("GDrive download error:", gdriveErr);
+                await m.reply(`⚠️ *Google Drive download failed!*\n\nSending direct link as fallback...`);
+                await client.sendMessage(m.jid, {
+                    text: `🔗 *${animeTitle}* (${qualityStr})\n\n${finalUrl}`
+                }, { quoted: metaQuote });
+                return;
             }
         }
 
-        await client.sendMessage(m.jid, { text: `📥 *Uploading Anime:* ${animeTitle}\n⚙️ *Quality:* ${qualityStr}\n\n_WhatsApp වෙත Upload වෙමින් පවතී. කරුණාකර රැඳී සිටින්න..._` }, { quoted: metaQuote });
+        // ---------- NON-GOOGLE DRIVE LINKS (Direct download) ----------
+        await m.reply(`📥 *Uploading Anime:* ${animeTitle}\n⚙️ *Quality:* ${qualityStr}\n\n_WhatsApp වෙත Upload වෙමින් පවතී. කරුණාකර රැඳී සිටින්න..._`);
 
-        const safeTitle = animeTitle.replace(/[^a-zA-Z0-9 ]/g, "").trim();
         const caption = `🎌 *${animeTitle}*\n⚙️ *Quality:* ${qualityStr}\n\n*${BOT_NAME}*\n_${POWERED_BY}_`;
 
         await client.sendMessage(m.jid, {
-            document: { url: downloadUrl },
+            document: { url: finalUrl },
             mimetype: "video/mp4",
             fileName: `${safeTitle} - ${qualityStr}.mp4`,
             caption: caption
         }, { quoted: metaQuote });
 
         await m.react("✅");
+        await m.reply(`✅ *Download complete!*`);
 
     } catch (err) {
-        console.error("Direct Upload Error:", err);
+        console.error("Download error:", err);
         await m.react("⚠️");
-        await m.reply(`⚠️ ගොනුව විශාල වැඩි බැවින් හෝ සර්වර් දෝෂයක් හේතුවෙන් Upload කිරීම අසාර්ථක විය.\n\n🔗 *බාගත කිරීම සඳහා සබැඳිය:*\n${finalUrl}`);
+        await m.reply(`⚠️ *Upload failed.*\n\n🔗 *Direct link:*\n${finalUrl}`);
     }
 }
