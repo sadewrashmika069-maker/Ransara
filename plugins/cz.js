@@ -4,7 +4,7 @@ const axios = require("axios");
 
 if (!global.cinesubzSessions) global.cinesubzSessions = new Map();
 
-// බ්‍රෑන්ඩින්ග් විස්තර
+// බොට් බ්‍රෑන්ඩින්ග් විස්තර
 const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
 const POWERED_BY = "Powered by sadew rashmika";
 
@@ -56,8 +56,8 @@ Sparky({
 *භාවිතය:* ${m.prefix}cz <movie_name>
 *උදාහරණ:* ${m.prefix}cz harry potter
 
-📌 *චිත්‍රපටය තෝරා ගැනීමට:* .<අංකය> (උදා: .1)
-📌 *Quality තෝරා ගැනීමට:* .dl <අංකය> (උදා: .dl 1)
+📌 *චිත්‍රපටය තෝරා ගැනීමට:* .<අංකය> (උදා: .1 සිට .10 දක්වා)
+📌 *Quality තෝරා ගැනීමට:* .dl <අංකය> (උදා: .dl 1, .dl 2, .dl 3)
 
 _${POWERED_BY}_`);
         }
@@ -81,9 +81,9 @@ _${POWERED_BY}_`);
             listMsg += `*${i + 1}.* ${movie.title} (${movie.year || 'N/A'})\n`;
         });
         
-        listMsg += `\n📌 *චිත්‍රපටය තෝරා ගැනීමට අංකය ටයිප් කරන්න:* .<අංකය>\n*උදාහරණ:* .1`;
+        listMsg += `\n📌 *චිත්‍රපටය තෝරා ගැනීමට අංකය ටයිප් කරන්න:* .<අංකය>\n*උදාහරණ:* .1 හෝ .10 දක්වා ඕනෑම එකක්`;
 
-        // පළවෙනි ෆිල්ම් එකේ Thumbnail එක අරගෙන මැසේජ් එක යැවීම
+        // පළවෙනි ෆิල්ම් එකේ Thumbnail එක අරගෙන මැසේජ් එක යැවීම
         const firstMovieImg = results[0].image || results[0].img || results[0].thumbnail;
         await sendMediaOrText(client, m.jid, listMsg, firstMovieImg, m);
 
@@ -105,38 +105,40 @@ _${POWERED_BY}_`);
 });
 
 // ==========================================
-// 2. DIRECT NUMBER SELECTOR (.1, .2, .3, ... .10)
+// 2. DYNAMIC NUMBER SELECTORS GENERATOR (.1 To .10)
 // ==========================================
-Sparky({
-    name: "1",
-    alias: ["2", "3", "4", "5", "6", "7", "8", "9", "10"],
-    category: "download",
-    fromMe: isPublic,
-    desc: "චිත්‍රපට අංකය කෙලින්ම තෝරා ගැනීමට."
-}, async ({ client, m }) => {
-    const session = global.cinesubzSessions.get(m.sender);
-    if (!session || session.step !== "awaiting_movie") return; // සෙශන් එකක් නැත්නම් කමාන්ඩ් එක වැඩ කරන්නේ නැත
+// මේ ලූප් එකෙන් .1, .2, .3 සිට .10 වෙනකම් හැම එකක්ම ස්වාධීන කමාන්ඩ්ස් බවට පත් කරයි.
+for (let i = 1; i <= 10; i++) {
+    Sparky({
+        name: `${i}`,
+        category: "download",
+        fromMe: isPublic,
+        desc: `Cinesubz චිත්‍රපට අංක ${i} තෝරා ගැනීමට.`
+    }, async ({ client, m }) => {
+        try {
+            const session = global.cinesubzSessions.get(m.sender);
+            if (!session || session.step !== "awaiting_movie") return; 
 
-    // යූසර් ටයිප් කරපු මැසේජ් එකෙන් නම්බර් එක පමණක් වෙන් කර ගැනීම
-    const num = parseInt(m.body.replace(/[^0-9]/g, ''));
-    if (isNaN(num)) return;
+            const idx = i - 1;
+            if (idx < 0 || idx >= session.results.length) {
+                return await m.reply(`❌ වැරදි අංකයක්! කරුණාකර ලයිස්තුවේ ඇති 1-${session.results.length} අතර අංකයක් ඇතුලත් කරන්න.`);
+            }
 
-    const idx = num - 1;
-    if (idx < 0 || idx >= session.results.length) {
-        return await m.reply(`❌ වැරදි අංකයක්! කරුණාකර ලයිස්තුවේ ඇති අංකයක් ඇතුලත් කරන්න.`);
-    }
-
-    const selectedMovie = session.results[idx];
-    
-    // චිත්‍රපට සෙශන් පියවර මකා දමයි
-    global.cinesubzSessions.delete(m.sender);
-    
-    // බාගැනීම් විකල්ප සහ Thumbnail ලබා ගැනීමට යැවීම
-    await fetchQualityOptions(client, m, selectedMovie);
-});
+            const selectedMovie = session.results[idx];
+            
+            // පැරණි පියවර මකා දමයි
+            global.cinesubzSessions.delete(m.sender);
+            
+            // ඊළඟ පියවරට යොමු කිරීම
+            await fetchQualityOptions(client, m, selectedMovie);
+        } catch (err) {
+            console.error(`Error in numeric command .${i}:`, err);
+        }
+    });
+}
 
 // ==========================================
-// 3. QUALITY SELECTOR COMMAND (.dl 1, .dl 2)
+// 3. QUALITY SELECTOR COMMAND (.dl 1, .dl 2, .dl 3)
 // ==========================================
 Sparky({
     name: "dl",
@@ -144,28 +146,37 @@ Sparky({
     fromMe: isPublic,
     desc: "Quality එක තෝරා බාගත කර ගැනීමට."
 }, async ({ client, m, args }) => {
-    const session = global.cinesubzSessions.get(m.sender);
-    if (!session || session.step !== "awaiting_quality") return;
+    try {
+        const session = global.cinesubzSessions.get(m.sender);
+        if (!session || session.step !== "awaiting_quality") return;
 
-    const query = getQuery(args);
-    const num = parseInt(query);
+        const query = getQuery(args);
+        const num = parseInt(query);
 
-    if (isNaN(num) || num < 1 || num > 3) {
-        return await m.reply(`❌ වැරදි අංකයක්! කරුණාකර .dl 1, .dl 2 හෝ .dl 3 ලෙස ඇතුලත් කරන්න.\n\n1. 480p\n2. 720p\n3. 1080p`);
+        if (isNaN(num) || num < 1 || num > 3) {
+            return await m.reply(`❌ වැරදි අංකයක්! කරුණාකර .dl 1, .dl 2 හෝ .dl 3 ලෙස ඇතුලත් කරන්න.\n\n1. .dl 1 = 480p\n2. .dl 2 = 720p\n3. .dl 3 = 1080p`);
+        }
+        
+        let qualityKey = "720p";
+        if (num === 1) qualityKey = "480p";
+        if (num === 2) qualityKey = "720p";
+        if (num === 3) qualityKey = "1080p";
+
+        // සෙශන් එකෙන් ලින්ක් එක ලබා ගැනීම
+        const finalUrl = session.linksMap[qualityKey];
+        const movieTitle = session.movieTitle;
+
+        if (!finalUrl) {
+            return await m.reply(`❌ සමාවෙන්න, මෙම චිත්‍රපටය සඳහා ${qualityKey} සබැඳියක් API එකෙන් ලබා දිය නොහැක.`);
+        }
+
+        // වැඩේ ඉවර නිසා සෙශන් එක ක්ලියර් කරයි
+        global.cinesubzSessions.delete(m.sender);
+
+        await downloadAndSendMovie(client, m, finalUrl, qualityKey, movieTitle);
+    } catch (err) {
+        console.error("DL command error:", err);
     }
-    
-    let qualityStr = "720p";
-    if (num === 1) qualityStr = "480p";
-    if (num === 2) qualityStr = "720p";
-    if (num === 3) qualityStr = "1080p";
-
-    const baseLink = session.baseLink;
-    const movieTitle = session.movieTitle;
-
-    // වැඩේ ඉවර නිසා සෙශන් එක ක්ලියර් කරයි
-    global.cinesubzSessions.delete(m.sender);
-
-    await downloadAndSendMovie(client, m, baseLink, qualityStr, movieTitle);
 });
 
 // ==========================================
@@ -189,27 +200,39 @@ async function fetchQualityOptions(client, m, selectedMovie) {
             return await m.reply(`❌ මෙම චිත්‍රපටය සඳහා බාගැනීම් සබැඳි (Links) හමු නොවිණි.`);
         }
 
-        const directVideo = data.data.find(v => v.is_direct_mp4) || data.data[0];
-        const baseLink = directVideo.link;
+        // API එකෙන් එන Links වෙන වෙනම Quality වලට වෙන් කර හඳුනාගැනීම (Bulletproof Mapping)
+        const linksMap = {
+            "480p": null,
+            "720p": null,
+            "1080p": null
+        };
 
-        if (!baseLink) {
-            await m.react("❌");
-            return await m.reply(`❌ බාගත හැකි මට්ටමේ කිසිදු ලින්ක් එකක් හමු නොවිණි.`);
-        }
+        data.data.forEach(linkObj => {
+            const qStr = (linkObj.quality || linkObj.resolution || "").toLowerCase();
+            if (qStr.includes("480")) linksMap["480p"] = linkObj.link;
+            else if (qStr.includes("720")) linksMap["720p"] = linkObj.link;
+            else if (qStr.includes("1080")) linksMap["1080p"] = linkObj.link;
+        });
+
+        // කිසිවක් නැත්නම් Default එකක් ලෙස පළමු ලින්ක් එක ලබා දීම
+        const fallbackLink = (data.data.find(v => v.is_direct_mp4) || data.data[0])?.link;
+        if (!linksMap["480p"]) linksMap["480p"] = fallbackLink;
+        if (!linksMap["720p"]) linksMap["720p"] = fallbackLink;
+        if (!linksMap["1080p"]) linksMap["1080p"] = fallbackLink;
 
         let qualMsg = `🎬 *${title}*\n\n📥 *ඔබට අවශ්‍ය Quality එක තෝරන්න:*\n\n`;
-        qualMsg += `1. *480p* (SD Quality)\n`;
-        qualMsg += `2. *720p* (HD Quality)\n`;
-        qualMsg += `3. *1080p* (Full HD Quality)\n\n`;
-        qualMsg += `📌 *බාගැනීමට කමාන්ඩ් එක දෙන්න:* .dl <අංකය>\n*උදාහරණ:* .dl 1`;
+        qualMsg += `1. *480p* (SD Quality) ➡️ 📥 *.dl 1*\n`;
+        qualMsg += `2. *720p* (HD Quality) ➡️ 📥 *.dl 2*\n`;
+        qualMsg += `3. *1080p* (Full HD Quality) ➡️ 📥 *.dl 3*\n\n`;
+        qualMsg += `📌 *බාගැනීමට කමාන්ඩ් එක දෙන්න:* .dl <අංකය>\n*උදාහරණ:* .dl 2`;
 
-        // තෝරාගත් චිත්‍රපටයේ Thumbnail එක සමඟ Quality මැසේජ් එක යැවීම
+        // තෝරාගත් චිත්‍රපටයේ Thumbnail එක සමඟම Quality මැසේජ් එක යැවීම
         await sendMediaOrText(client, m.jid, qualMsg, movieImg, m);
 
         // ඊළඟ පියවර සඳහා Quality සෙශන් එක සක්‍රීය කිරීම
         global.cinesubzSessions.set(m.sender, {
             step: "awaiting_quality",
-            baseLink: baseLink,
+            linksMap: linksMap,
             movieTitle: title,
             timestamp: Date.now()
         });
@@ -227,24 +250,14 @@ async function fetchQualityOptions(client, m, selectedMovie) {
 // ==========================================
 // DOWNLOAD & DIRECT SEND FUNCTION
 // ==========================================
-async function downloadAndSendMovie(client, m, baseLink, qualityStr, movieTitle) {
+async function downloadAndSendMovie(client, m, finalUrl, qualityStr, movieTitle) {
     try {
         await m.react("⬇️");
         const metaQuote = getMetaQuote();
 
         await client.sendMessage(m.jid, { text: `📥 *Downloading:* ${movieTitle}\n⚙️ *Quality:* ${qualityStr}\n\n_මෙය විශාල file එකක් බැවින්, WhatsApp වෙත Upload වීමට ටික වේලාවක් ගත විය හැක..._` }, { quoted: metaQuote });
-
-        // Quality එකට අනුව ලින්ක් එක වෙනස් කිරීම
-        let finalUrl = baseLink;
-        if (qualityStr === '480p') {
-            finalUrl = baseLink.replace(/(720p|1080p|1080|720)/i, '480p');
-        } else if (qualityStr === '720p') {
-            finalUrl = baseLink.replace(/(480p|1080p|1080|480)/i, '720p');
-        } else if (qualityStr === '1080p') {
-            finalUrl = baseLink.replace(/(480p|720p|480|720)/i, '1080p');
-        }
         
-        // 2GB වට්ස්ඇප් සීමාව චෙක් කිරීම
+        // 2GB වට්ස්ඇප් ලිමිට් එක චෙක් කිරීම
         try {
             const headRes = await axios.head(finalUrl, { timeout: 10000 });
             if (headRes && headRes.headers['content-length']) {
@@ -261,7 +274,7 @@ async function downloadAndSendMovie(client, m, baseLink, qualityStr, movieTitle)
         const safeTitle = movieTitle.replace(/[^a-zA-Z0-9 ]/g, "").trim();
         const caption = `🎬 *${movieTitle}*\n⚙️ *Quality:* ${qualityStr}\n\n*${BOT_NAME}*\n_${POWERED_BY}_`;
 
-        // Direct stream download
+        // Direct Stream Download
         await client.sendMessage(m.jid, {
             document: { url: finalUrl },
             mimetype: "video/mp4",
