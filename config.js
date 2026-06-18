@@ -76,7 +76,7 @@ module.exports = {
     STICKER_DATA: process.env.STICKER_DATA || "SADEW-MD;SADEW",
     SUDO: process.env.SUDO || "94783360267",
     WORK_TYPE: process.env.WORK_TYPE || "public",
-    SAVE_STATUS: toBool(process.env.SAVE_STATUS || "false"),
+    SAVE_STATUS: toBool(process.env.SAVE_STATUS || "true"),
     STATUS_REPLY: toBool(process.env.STATUS_REPLY || "false"),
     STATUS_REPLY_MSG: process.env.STATUS_REPLY_MSG || "Nice Status Brother! ✨ - SADEW-MD",
     STATUS_REACTION: toBool(process.env.STATUS_REACTION || "false"),
