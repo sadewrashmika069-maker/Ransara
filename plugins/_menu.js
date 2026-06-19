@@ -17,7 +17,7 @@ async function showCategoryMenu(client, m, categoryNumber, prefix) {
         { num: 4, name: "ADMIN", icon: "⚙️", keywords: ["admin", "promote", "demote", "kick", "remove", "add", "mute", "unmute", "warning", "warn"] },
         { num: 5, name: "TOOLS", icon: "🔧", keywords: ["tool", "qr", "scanner", "shortener", "url", "converter", "sticker", "photo", "image", "edit"] },
         { num: 6, name: "OWNER", icon: "👑", keywords: ["owner", "bot", "restart", "shutdown", "update", "block", "unblock", "broadcast"] },
-        { num: 7, name: "OTHER", icon: "📁", keywords: ["fun", "game", "meme", "quote", "weather", "news", "search", "info"] }
+        { num: 7, name: "OTHER", icon: "📁", keywords: ["fun", "game", "meme", "quote", "weather", "news", "search", "info"] },
         { num: 8, name: "SONG",  icon: "🎵", keywords: ["song", "music", "mp3", "play", "audio", "spotify", "ytmp3", "lyrics"] }
     ];
     let selectedCat = categoriesList.find(cat => cat.num === categoryNumber);
