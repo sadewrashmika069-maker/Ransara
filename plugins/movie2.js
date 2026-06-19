@@ -2,7 +2,6 @@
 const { Sparky, isPublic } = require("../lib");
 const axios = require("axios");
 
-// Dubflix සඳහා වෙනම Session Map එකක්
 if (!global.dubflixSessions) global.dubflixSessions = new Map();
 
 const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
@@ -36,7 +35,7 @@ function getQuery(args) {
 }
 
 // ==========================================
-// 1. MAIN SEARCH & EPISODE SELECTOR (.df)
+// 1. MAIN SEARCH COMMAND (.df)
 // ==========================================
 Sparky({
     name: "df",
@@ -49,25 +48,9 @@ Sparky({
         const query = getQuery(args);
 
         if (!query) {
-            return await m.reply(`🎬 *${BOT_NAME} - DUBFLIX*\n\n*භාවිතය:* ${m.prefix}df <movie_name>\n*උදා:* ${m.prefix}df venom\n\n📌 *චිත්‍රපටය තෝරා ගැනීමට:* .1 සිට .15\n📌 *Episode තෝරා ගැනීමට:* .df 1 සිට .df 15\n📌 *Quality තෝරා ගැනීමට:* .m1, .m2, .m3`);
+            return await m.reply(`🎬 *${BOT_NAME} - DUBFLIX*\n\n*භාවිතය:* ${m.prefix}df <movie_name>\n*උදා:* ${m.prefix}df venom\n\n📌 *චිත්‍රපටය තෝරා ගැනීමට:* .1 සිට .15\n📌 *Episode තෝරා ගැනීමට:* .ep1 සිට .ep15\n📌 *Quality තෝරා ගැනීමට:* .m1, .m2, .m3`);
         }
 
-        // Check if this is an Episode Selection (.df 1, .df 2, etc.)
-        const numQuery = parseInt(query);
-        if (!isNaN(numQuery) && numQuery > 0 && numQuery <= 15) {
-            const session = global.dubflixSessions.get(m.sender);
-            if (session && session.step === "awaiting_episode") {
-                const idx = numQuery - 1;
-                if (idx < 0 || idx >= session.episodes.length) {
-                    return await m.reply(`❌ වැරදි අංකයක්! 1-${session.episodes.length} අතර අංකයක් දෙන්න.`);
-                }
-                const selectedEp = session.episodes[idx];
-                global.dubflixSessions.delete(m.sender); // clear episode session
-                return await fetchDfQualityOptions(client, m, { url: selectedEp.link, thumbnail: session.movieImg, title: selectedEp.name });
-            }
-        }
-
-        // Otherwise, perform normal movie search
         await m.react("🔍");
         await client.sendPresenceUpdate('composing', m.jid);
         await m.reply(`🔎 Dubflix හි සොයමින් "${query}"...`);
@@ -109,7 +92,7 @@ Sparky({
 });
 
 // ==========================================
-// 2. DYNAMIC NUMBER SELECTORS (.1 To .15)
+// 2. DYNAMIC NUMBER SELECTORS FOR MOVIES (.1 To .15)
 // ==========================================
 for (let i = 1; i <= 15; i++) {
     Sparky({
@@ -138,7 +121,36 @@ for (let i = 1; i <= 15; i++) {
 }
 
 // ==========================================
-// 3. DYNAMIC QUALITY SELECTORS (.m1, .m2, .m3)
+// 3. DYNAMIC EPISODE SELECTORS (.ep1 To .ep15)
+// ==========================================
+for (let k = 1; k <= 15; k++) {
+    Sparky({
+        name: `ep${k}`,
+        category: "download",
+        fromMe: isPublic,
+        desc: `Series Episode ${k} තෝරා ගැනීමට.`
+    }, async ({ client, m }) => {
+        try {
+            const session = global.dubflixSessions.get(m.sender);
+            if (!session || session.step !== "awaiting_episode") return; 
+
+            const idx = k - 1;
+            if (idx < 0 || idx >= session.episodes.length) {
+                return await m.reply(`❌ වැරදි අංකයක්! කරුණාකර ලයිස්තුවේ ඇති 1-${session.episodes.length} අතර අංකයක් ඇතුලත් කරන්න.`);
+            }
+
+            const selectedEp = session.episodes[idx];
+            global.dubflixSessions.delete(m.sender);
+            
+            await fetchDfQualityOptions(client, m, { url: selectedEp.link, thumbnail: session.movieImg, title: selectedEp.name });
+        } catch (err) {
+            console.error(`Error in episode command .ep${k}:`, err);
+        }
+    });
+}
+
+// ==========================================
+// 4. DYNAMIC QUALITY SELECTORS (.m1, .m2, .m3)
 // ==========================================
 for (let j = 1; j <= 3; j++) {
     Sparky({
@@ -204,7 +216,7 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
         const resultData = data.results;
         const title = resultData.title || selectedMovie.title;
 
-        // 1. Direct Link එකක් තියෙනවා නම් (Movie එකක් නම්)
+        // 1. Direct Link available
         if (resultData.direct_link && resultData.direct_link !== "N/A") {
             const baseLink = resultData.direct_link;
 
@@ -226,7 +238,7 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
             setTimeout(() => global.dubflixSessions.delete(m.sender), 5 * 60 * 1000);
             await m.react("🎬");
 
-        // 2. Series එකක් නම් (Direct Link එක නැත්නම්) එපිසෝඩ් ලිස්ට් එක යවනවා
+        // 2. Series / Collection List
         } else if (resultData.is_series && resultData.series_list && resultData.series_list.length > 0) {
             let caption = `🎬 *${title}*\n📌 *මෙය Series එකක් හෝ Collection එකකි.*\n\n👇 *පහතින් අවශ්‍ය කොටස තෝරාගන්න:*\n\n`;
             
@@ -236,7 +248,7 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
                 caption += `*${i + 1}.* ${episode.name}\n`;
             });
             
-            caption += `\n_(කොටස තේරීමට .df 1, .df 2 ආදී වශයෙන් යවන්න)_`;
+            caption += `\n_(කොටස තේරීමට .ep1, .ep2 ආදී වශයෙන් යවන්න)_`;
 
             await sendMediaOrText(client, m.jid, caption, movieImg, m);
             
@@ -247,6 +259,7 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
                 timestamp: Date.now()
             });
 
+            setTimeout(() => global.dubflixSessions.delete(m.sender), 5 * 60 * 1000);
             await m.react("🎬");
 
         } else {
@@ -269,7 +282,7 @@ async function downloadAndSendDfMovie(client, m, finalUrl, qualityStr, movieTitl
         await m.react("⬇️");
         const metaQuote = getMetaQuote();
         
-        // MEGA LINK DETECTION (HTML 2KB අවුල විසඳීම)
+        // MEGA LINK DETECTION (HTML 2KB fix)
         if (finalUrl.includes("mega.nz")) {
             await m.react("⚠️");
             return await client.sendMessage(m.jid, { 
