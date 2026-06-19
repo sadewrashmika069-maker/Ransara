@@ -1,246 +1,311 @@
-const { Sparky } = require("../lib");
-const axios = require('axios');
+// commands/dubflix.js
+const { Sparky, isPublic } = require("../lib");
+const axios = require("axios");
 
+// Dubflix සඳහා වෙනම Session Map එකක්
+if (!global.dubflixSessions) global.dubflixSessions = new Map();
+
+// බොට් බ්‍රෑන්ඩින්ග් විස්තර
+const BOT_NAME = "★👑𝙎𝘼𝘿𝙀𝙒-𝙓-𝙈𝘿🔥 ★";
+const POWERED_BY = "Powered by sadew rashmika";
 const API_KEY = "zan_FIAO7Ayh_eo1vllkep6";
 
+// Fake Quote එකක් සැකසීමට පොදු ෆන්ක්ෂන් එකක්
+function getMetaQuote() {
+    return {
+        key: { remoteJid: "status@broadcast", participant: "0@s.whatsapp.net", fromMe: false, id: "SADEW_X_MD_DF" },
+        message: { contactMessage: { displayName: BOT_NAME, vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${BOT_NAME}\nORG:${POWERED_BY}\nTEL;waid=13135550002:+1 313 555 0002\nEND:VCARD` } }
+    };
+}
+
+// පින්තූරයක් හෝ ටෙක්ස්ට් එකක් බිඳෙන්නේ නැතිව යැවීමට සකසන ලද සේෆ් ෆන්ක්ෂන් එකක්
+async function sendMediaOrText(client, jid, text, imageUrl, quoted) {
+    if (imageUrl && imageUrl !== "N/A") {
+        try {
+            await client.sendMessage(jid, { image: { url: imageUrl }, caption: text }, { quoted });
+            return;
+        } catch (e) {
+            console.error("Thumbnail sending failed, falling back to text:", e);
+        }
+    }
+    await client.sendMessage(jid, { text: text }, { quoted });
+}
+
+function getQuery(args) {
+    if (!args) return "";
+    if (Array.isArray(args)) return args.join(" ").trim();
+    if (typeof args === "string") return args.trim();
+    if (typeof args === "object") return Object.values(args).join(" ").trim();
+    return "";
+}
+
 // ==========================================
-// 1. DUBFLIX SEARCH COMMAND (.dubflix / .df)
+// 1. MAIN DUBFLIX SEARCH COMMAND (.dubflix / .df)
 // ==========================================
 Sparky({
-    pattern: "dubflix",
+    name: "dubflix",
     alias: ["df"],
-    desc: "Search and get download links for movies from Dubflix",
     category: "download",
-    use: '.dubflix <movie name>',
-    filename: __filename
-},
-async ({ m, client, args }) => {
+    fromMe: isPublic,
+    desc: "🎬 Dubflix වෙබ් අඩවියෙන් චිත්‍රපට සොයන්න."
+}, async ({ client, m, args }) => {
     try {
-        const query = args.join(" ");
+        const query = getQuery(args);
 
         if (!query) {
-            return await client.sendMessage(m.chat, { text: "🎬 *කරුණාකර Movie එකේ නම ලබා දෙන්න!*\n_උදා: .df avatar_" }, { quoted: m });
+            return await m.reply(`🎬 *${BOT_NAME} - DUBFLIX*
+
+*භාවිතය:* ${m.prefix}df <movie_name>
+*උදාහරණ:* ${m.prefix}df venom
+
+📌 *චිත්‍රපටය තෝරා ගැනීමට:* .d<අංකය> (උදා: .d1 සිට .d10 දක්වා)
+📌 *Quality තෝරා ගැනීමට:* .dm1, .dm2, .dm3
+
+_${POWERED_BY}_`);
         }
 
-        const botName = "SADEW-MD";
-        const metaQuote = {
-            key: { remoteJid: "status@broadcast", participant: "0@s.whatsapp.net", fromMe: false, id: "META_AI_DF" },
-            message: { contactMessage: { displayName: botName, vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${botName}\nORG:Dubflix\nTEL;waid=13135550002:+1 313 555 0002\nEND:VCARD` } }
-        };
+        await m.react("🔍");
+        await client.sendPresenceUpdate('composing', m.jid);
+        await m.reply(`🔎 Dubflix හි සොයමින් "${query}"...`);
 
-        await client.sendMessage(m.chat, { react: { text: "🔍", key: m.key } });
-
-        // Search API එකෙන් ඩේටා ලබා ගැනීම
         const searchUrl = `https://api.zanta-mini.store/api/dubflix/search?apiKey=${API_KEY}&text=${encodeURIComponent(query)}`;
-        const res = await axios.get(searchUrl);
-        const data = res.data;
+        const { data } = await axios.get(searchUrl, { timeout: 15000 });
 
         if (!data.success || !data.results || data.results.length === 0) {
-            return await client.sendMessage(m.chat, { text: "❌ *සමාවෙන්න, එම නමින් Movies කිසිවක් හමුවූයේ නැත.*" }, { quoted: m });
+            await m.react("❌");
+            return await m.reply(`❌ සමාවෙන්න, "${query}" සඳහා කිසිදු චිත්‍රපටයක් හමුනොවිය.`);
         }
 
-        // මුල් ප්‍රතිපල 10 වෙන්කර ගැනීම
-        const topResults = data.results.slice(0, 10);
-        let listText = `🎬 *SADEW MD DUBFLIX SEARCH*\n\n🔍 *සෙව්වේ:* ${query}\n👇 *ඔබට අවශ්‍ය ෆිල්ම් එකේ අංකය Reply කරන්න*\n\n`;
+        const results = data.results.slice(0, 10);
+        let listMsg = `🎬 *${BOT_NAME} - DUBFLIX SEARCH*\n\n🔍 *සෙව්වේ:* ${query}\n📊 ප්‍රතිඵල ගණන: ${results.length}\n\n`;
         
-        topResults.forEach((mv, index) => {
-            listText += `*${index + 1}.* ${mv.title}\n`;
+        results.forEach((movie, i) => {
+            listMsg += `*${i + 1}.* ${movie.title}\n`;
         });
-        listText += `\n> **Reply with 1 - ${topResults.length}**`;
+        
+        listMsg += `\n📌 *චිත්‍රපටය තෝරා ගැනීමට අංකය ටයිප් කරන්න:* .d<අංකය>\n*උදාහරණ:* .d1 හෝ .d10 දක්වා ඕනෑම එකක්`;
 
-        const listMsg = await client.sendMessage(m.chat, { text: listText }, { quoted: metaQuote });
+        const firstMovieImg = results[0].thumbnail || results[0].image || results[0].img;
+        await sendMediaOrText(client, m.jid, listMsg, firstMovieImg, m);
 
-        // ==========================================
-        // REPLY LISTENER
-        // ==========================================
-        const listener = async ({ messages }) => {
-            const replyMsg = messages[0];
-            if (!replyMsg.message) return;
+        global.dubflixSessions.set(m.sender, {
+            step: "awaiting_movie",
+            results: results,
+            timestamp: Date.now()
+        });
+        
+        setTimeout(() => global.dubflixSessions.delete(m.sender), 5 * 60 * 1000);
+        await m.react("✅");
 
-            const replyContext = replyMsg.message.extendedTextMessage?.contextInfo;
-            const isReplyToBot = replyContext?.stanzaId === listMsg.key.id;
-
-            if (isReplyToBot) {
-                const userReply = (replyMsg.message.conversation || replyMsg.message.extendedTextMessage?.text || "").trim();
-                const selectedIndex = parseInt(userReply) - 1;
-
-                if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= topResults.length) {
-                    return await client.sendMessage(m.chat, { text: "❌ *වැරදි අංකයක්! කරුණාකර නිවැරදි අංකයක් reply කරන්න.*" }, { quoted: replyMsg });
-                }
-
-                const selectedMovie = topResults[selectedIndex];
-
-                try {
-                    await client.sendMessage(m.chat, { react: { text: "🎬", key: replyMsg.key } });
-
-                    // Download API එකට URL එක යවා විස්තර ලබා ගැනීම
-                    const extractUrl = `https://api.zanta-mini.store/api/dubflix/dl?apiKey=${API_KEY}&text=${encodeURIComponent(selectedMovie.url)}`;
-                    const extRes = await axios.get(extractUrl);
-                    const extData = extRes.data;
-
-                    if (!extData.success || !extData.results) {
-                        return await client.sendMessage(m.chat, { text: "❌ *මෙම චිත්‍රපටියේ Direct Links ලබාගත නොහැක.*" }, { quoted: replyMsg });
-                    }
-
-                    const resultData = extData.results;
-                    let caption = `🎬 *${resultData.title || selectedMovie.title}*\n\n📅 *Release Date:* ${resultData.release_date || 'N/A'}\n⏱ *Duration:* ${resultData.duration || 'N/A'}\n🎭 *Genres:* ${(resultData.genres || []).join(", ")}\n\n`;
-
-                    // 1. Direct Link එකක් තියෙනවා නම් කෙලින්ම යවනවා
-                    if (resultData.direct_link && resultData.direct_link !== "N/A") {
-                        const shortTitle = (resultData.title || selectedMovie.title).substring(0, 20).replace(/[^a-zA-Z0-9 ]/g, "").trim();
-                        caption += `> *Buttons වැඩ කරන්නේ නැත්නම් පහත Command එක Copy කර යවන්න:*\n\n🎥 *Download:*\n.df_dl ${shortTitle} || ${resultData.direct_link}`;
-                        
-                        const buttons = [
-                            { buttonId: `.df_dl ${shortTitle} || ${resultData.direct_link}`, buttonText: { displayText: "🎥 Download Movie" }, type: 1 }
-                        ];
-
-                        await client.sendMessage(m.chat, {
-                            image: { url: selectedMovie.thumbnail },
-                            caption: caption,
-                            footer: 'Sadew MD Dubflix',
-                            buttons: buttons,
-                            headerType: 4
-                        }, { quoted: replyMsg });
-
-                    // 2. Series එකක් නම් (Direct Link එක නැත්නම්) එපිසෝඩ් ලිස්ට් එක යවනවා
-                    } else if (resultData.is_series && resultData.series_list && resultData.series_list.length > 0) {
-                        caption += `📌 *මෙය Series එකක් හෝ Collection එකකි. පහතින් අවශ්‍ය කොටස තෝරාගන්න:*\n\n`;
-                        
-                        // # වලින් පටන් ගන්න බොරු Categories (උදා: #Action) අයින් කිරීම
-                        const filteredSeries = resultData.series_list.filter(item => !item.name.startsWith('#'));
-                        
-                        filteredSeries.forEach((episode, i) => {
-                            caption += `*${i + 1}.* ${episode.name}\n🔗 *Command:* .df_get ${episode.link}\n\n`;
-                        });
-
-                        await client.sendMessage(m.chat, {
-                            image: { url: selectedMovie.thumbnail },
-                            caption: caption
-                        }, { quoted: replyMsg });
-                    } else {
-                        return await client.sendMessage(m.chat, { text: "❌ *මෙම චිත්‍රපටිය සඳහා Download Links හමුවූයේ නැත.*" }, { quoted: replyMsg });
-                    }
-
-                    client.ev.off('messages.upsert', listener);
-
-                } catch (e) {
-                    console.error("Dubflix Detail Fetch Error:", e);
-                    client.ev.off('messages.upsert', listener);
-                }
-            }
-        };
-
-        client.ev.on('messages.upsert', listener);
-        setTimeout(() => { client.ev.off('messages.upsert', listener); }, 60000); 
-
-    } catch (e) {
-        console.error("Dubflix Search Error:", e);
-        await client.sendMessage(m.chat, { text: "❌ *සෙවීමේදී දෝෂයක් ඇතිවිය.*" }, { quoted: m });
+    } catch (err) {
+        console.error("Dubflix Search Error:", err);
+        await m.react("❌");
+        await m.reply(`❌ සෙවීම අසාර්ථකයි: ${err.message.substring(0, 100)}`);
     }
 });
 
 // ==========================================
-// 2. SERIES EPISODE GETTER (.df_get)
+// 2. DYNAMIC NUMBER SELECTORS (.d1 To .d10)
 // ==========================================
-Sparky({
-    pattern: "df_get",
-    dontAddCommandList: true, // ලිස්ට් එකේ පෙන්වන්න ඕනේ නෑ
-    category: "download",
-    filename: __filename
-},
-async ({ m, client, args }) => {
-    try {
-        const url = args[0];
-        if (!url) return;
-
-        await client.sendMessage(m.chat, { react: { text: "⏳", key: m.key } });
-
-        const extractUrl = `https://api.zanta-mini.store/api/dubflix/dl?apiKey=${API_KEY}&text=${encodeURIComponent(url)}`;
-        const extRes = await axios.get(extractUrl);
-        const extData = extRes.data;
-
-        if (!extData.success || !extData.results || extData.results.direct_link === "N/A") {
-            return await client.sendMessage(m.chat, { text: "❌ *මෙම කොටසේ Direct Link ලබාගත නොහැක.*" }, { quoted: m });
-        }
-
-        const resultData = extData.results;
-        const shortTitle = resultData.title.substring(0, 20).replace(/[^a-zA-Z0-9 ]/g, "").trim();
-        
-        const caption = `🎬 *${resultData.title}*\n\n> *Buttons වැඩ කරන්නේ නැත්නම් පහත Command එක Copy කර යවන්න:*\n\n🎥 *Download:*\n.df_dl ${shortTitle} || ${resultData.direct_link}`;
-        
-        const buttons = [
-            { buttonId: `.df_dl ${shortTitle} || ${resultData.direct_link}`, buttonText: { displayText: "🎥 Download Video" }, type: 1 }
-        ];
-
-        await client.sendMessage(m.chat, {
-            text: caption,
-            footer: 'Sadew MD Dubflix',
-            buttons: buttons,
-            headerType: 1
-        }, { quoted: m });
-
-    } catch (e) {
-        console.error("df_get Error:", e);
-    }
-});
-
-// ==========================================
-// 3. MOVIE DOWNLOAD COMMAND (.df_dl)
-// ==========================================
-Sparky({
-    pattern: "df_dl",
-    dontAddCommandList: true,
-    category: "download",
-    filename: __filename
-},
-async ({ m, client }) => {
-    const textContent = m.message?.buttonsResponseMessage?.selectedButtonId || m.text || '';
-    const inputData = textContent.replace(/^[.\/!#]df_dl\s*/i, '').trim();
-    
-    if (!inputData.includes('||')) return;
-
-    const [title, finalUrl] = inputData.split(' || ');
-    if (!finalUrl) return;
-
-    const botName = "SADEW-MD";
-    const metaQuote = {
-        key: { remoteJid: "status@broadcast", participant: "0@s.whatsapp.net", fromMe: false, id: "META_AI_DF_DL" },
-        message: { contactMessage: { displayName: botName, vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${botName}\nORG:Dubflix Downloader\nTEL;waid=13135550002:+1 313 555 0002\nEND:VCARD` } }
-    };
-
-    try {
-        await client.sendMessage(m.chat, { react: { text: "⬇️", key: m.key } });
-        await client.sendMessage(m.chat, { text: `⬇️ *Downloading ${title}...*\n_මෙය විශාල file එකක් බැවින්, WhatsApp වෙත Upload වීමට ටික වේලාවක් ගත විය හැක._` }, { quoted: metaQuote });
-
-        // Memory Check (Prevent GitHub Actions Out-Of-Memory / WA 2GB Limit)
+for (let i = 1; i <= 10; i++) {
+    Sparky({
+        name: `d${i}`,
+        category: "download",
+        fromMe: isPublic,
+        desc: `Dubflix චිත්‍රපට අංක ${i} තෝරා ගැනීමට.`
+    }, async ({ client, m }) => {
         try {
-            const headRes = await axios.head(finalUrl);
-            if (headRes && headRes.headers['content-length']) {
-                const sizeMB = parseInt(headRes.headers['content-length']) / (1024 * 1024);
-                if (sizeMB > 1950) { 
-                    await client.sendMessage(m.chat, { react: { text: "❌", key: m.key } });
-                    return await client.sendMessage(m.chat, { text: `❌ *Error: File එක 2GB වලට වඩා විශාලයි! (${sizeMB.toFixed(2)} MB)*\nWhatsApp හරහා මෙය යැවිය නොහැක.` }, { quoted: m });
-                }
+            const session = global.dubflixSessions.get(m.sender);
+            if (!session || session.step !== "awaiting_movie") return; 
+
+            const idx = i - 1;
+            if (idx < 0 || idx >= session.results.length) {
+                return await m.reply(`❌ වැරදි අංකයක්! කරුණාකර ලයිස්තුවේ ඇති 1-${session.results.length} අතර අංකයක් ඇතුලත් කරන්න.`);
             }
-        } catch (headErr) {
-            console.log("Size check failed, proceeding with direct upload...");
+
+            const selectedMovie = session.results[idx];
+            global.dubflixSessions.delete(m.sender);
+            
+            await fetchDfQualityOptions(client, m, selectedMovie);
+        } catch (err) {
+            console.error(`Error in numeric command .d${i}:`, err);
+        }
+    });
+}
+
+// ==========================================
+// 3. DYNAMIC QUALITY SELECTORS (.dm1, .dm2, .dm3)
+// ==========================================
+for (let j = 1; j <= 3; j++) {
+    Sparky({
+        name: `dm${j}`,
+        category: "download",
+        fromMe: isPublic,
+        desc: `Dubflix Quality ${j} තෝරා බාගත කර ගැනීමට.`
+    }, async ({ client, m }) => {
+        try {
+            const session = global.dubflixSessions.get(m.sender);
+            if (!session || session.step !== "awaiting_quality") return;
+
+            let qualityKey = "720p";
+            if (j === 1) qualityKey = "480p";
+            if (j === 2) qualityKey = "720p";
+            if (j === 3) qualityKey = "1080p";
+
+            const baseLink = session.baseLink;
+            const movieTitle = session.movieTitle;
+
+            if (!baseLink || baseLink === "N/A") {
+                return await m.reply(`❌ සමාවෙන්න, බාගැනීම් සබැඳියක් හමු නොවීය.`);
+            }
+
+            let finalUrl = baseLink;
+            if (qualityKey === '480p') {
+                finalUrl = baseLink.replace(/(720p|1080p|1080|720)/gi, '480p');
+            } else if (qualityKey === '720p') {
+                finalUrl = baseLink.replace(/(480p|1080p|1080|480)/gi, '720p');
+            } else if (qualityKey === '1080p') {
+                finalUrl = baseLink.replace(/(480p|720p|480|720)/gi, '1080p');
+            }
+
+            global.dubflixSessions.delete(m.sender);
+
+            await downloadAndSendDfMovie(client, m, finalUrl, qualityKey, movieTitle);
+        } catch (err) {
+            console.error(`Error in quality command .dm${j}:`, err);
+        }
+    });
+}
+
+// ==========================================
+// FETCH QUALITY OPTIONS FUNCTION
+// ==========================================
+async function fetchDfQualityOptions(client, m, selectedMovie) {
+    const movieUrl = selectedMovie.url;
+    const movieImg = selectedMovie.thumbnail;
+
+    await m.react("⏳");
+    await client.sendPresenceUpdate('composing', m.jid);
+    await m.reply(`📥 තොරතුරු ලබා ගනිමින් පවතී... කරුණාකර රැඳී සිටින්න.`);
+
+    try {
+        const extractUrl = `https://api.zanta-mini.store/api/dubflix/dl?apiKey=${API_KEY}&text=${encodeURIComponent(movieUrl)}`;
+        const { data } = await axios.get(extractUrl, { timeout: 15000 });
+
+        if (!data.success || !data.results) {
+            await m.react("❌");
+            return await m.reply(`❌ මෙම චිත්‍රපටය සඳහා බාගැනීම් සබැඳි (Links) හමු නොවිණි.`);
         }
 
-        const caption = `🎬 *${title}*\n\n> **SADEW MD DUBFLIX DL ✨**`;
+        const resultData = data.results;
+        const title = resultData.title || selectedMovie.title;
 
-        // Direct stream to WA to bypass GitHub memory limits
-        await client.sendMessage(m.chat, {
+        // 1. Direct Link එකක් තියෙනවා නම් (Movie එකක් නම්)
+        if (resultData.direct_link && resultData.direct_link !== "N/A") {
+            const baseLink = resultData.direct_link;
+
+            let qualMsg = `🎬 *${title}*\n📅 Release: ${resultData.release_date || 'N/A'}\n\n📥 *ඔබට අවශ්‍ය Quality එක තෝරන්න:*\n\n`;
+            qualMsg += `🟢 *480p* (SD Quality) ➡️ 📥 *.dm1*\n`;
+            qualMsg += `🟢 *720p* (HD Quality) ➡️ 📥 *.dm2*\n`;
+            qualMsg += `🟢 *1080p* (Full HD) ➡️ 📥 *.dm3*\n\n`;
+            qualMsg += `📌 *බාගැනීමට කමාන්ඩ් එක දෙන්න:* .dm1, .dm2 හෝ .dm3`;
+
+            await sendMediaOrText(client, m.jid, qualMsg, movieImg, m);
+
+            global.dubflixSessions.set(m.sender, {
+                step: "awaiting_quality",
+                baseLink: baseLink,
+                movieTitle: title,
+                timestamp: Date.now()
+            });
+            
+            setTimeout(() => global.dubflixSessions.delete(m.sender), 5 * 60 * 1000);
+            await m.react("🎬");
+
+        // 2. Series එකක් නම් (Direct Link එක නැත්නම්) එපිසෝඩ් ලිස්ට් එක යවනවා
+        } else if (resultData.is_series && resultData.series_list && resultData.series_list.length > 0) {
+            let caption = `🎬 *${title}*\n📌 *මෙය Series එකක් හෝ Collection එකකි.*\n\n👇 *පහතින් අවශ්‍ය කොටස තෝරාගන්න:*\n\n`;
+            
+            const filteredSeries = resultData.series_list.filter(item => !item.name.startsWith('#'));
+            
+            filteredSeries.forEach((episode, i) => {
+                caption += `*${i + 1}.* ${episode.name}\n🔗 *Command:* .df_ep ${episode.link}\n\n`;
+            });
+            
+            caption += `_(ඉහත Command එක Copy කර යැවීමෙන් අදාළ කොටස බාගත කරගත හැක)_`;
+
+            await sendMediaOrText(client, m.jid, caption, movieImg, m);
+            await m.react("🎬");
+
+        } else {
+            await m.react("❌");
+            return await m.reply(`❌ මෙම චිත්‍රපටිය සඳහා Download Links හමුවූයේ නැත.`);
+        }
+
+    } catch (err) {
+        console.error("Dubflix Quality Fetch Error:", err);
+        await m.react("❌");
+        await m.reply(`❌ තොරතුරු ලබා ගැනීම අසාර්ථකයි: ${err.message.substring(0, 100)}`);
+    }
+}
+
+// ==========================================
+// SERIES EPISODE HANDLER (.df_ep)
+// ==========================================
+Sparky({
+    name: "df_ep",
+    category: "download",
+    fromMe: isPublic,
+    desc: "Dubflix Series Episode ලබා ගැනීම"
+}, async ({ client, m, args }) => {
+    try {
+        const url = getQuery(args);
+        if (!url) return await m.reply("❌ කරුණාකර Episode Link එක ලබා දෙන්න.");
+
+        await fetchDfQualityOptions(client, m, { url: url, thumbnail: null, title: "Episode" });
+    } catch (err) {
+        console.error("df_ep Error:", err);
+    }
+});
+
+// ==========================================
+// DOWNLOAD & DIRECT SEND FUNCTION
+// ==========================================
+async function downloadAndSendDfMovie(client, m, finalUrl, qualityStr, movieTitle) {
+    try {
+        await m.react("⬇️");
+        const metaQuote = getMetaQuote();
+
+        await client.sendMessage(m.jid, { text: `📥 *Downloading:* ${movieTitle}\n⚙️ *Quality:* ${qualityStr}\n\n_මෙය WhatsApp වෙත Upload වීමට ටික වේලාවක් ගත විය හැක..._` }, { quoted: metaQuote });
+        
+        try {
+            const headRes = await axios.head(finalUrl, { timeout: 10000 });
+            if (headRes && headRes.headers['content-length']) {
+                const sizeInMB = parseInt(headRes.headers['content-length']) / (1024 * 1024);
+                if (sizeInMB > 1990) {
+                    await m.react("❌");
+                    return await m.reply(`❌ *ගොනුව විශාල වැඩියි! (${sizeInMB.toFixed(2)} MB)*\nවට්ස්ඇප් හරහා යැවිය හැක්කේ 2GB ට අඩු ෆයිල් පමණි.`);
+                }
+            }
+        } catch (hErr) {
+            console.log("Size check bypassed.");
+        }
+
+        const safeTitle = movieTitle.replace(/[^a-zA-Z0-9 ]/g, "").trim();
+        const caption = `🎬 *${movieTitle}*\n⚙️ *Quality:* ${qualityStr}\n\n*${BOT_NAME}*\n_${POWERED_BY}_`;
+
+        await client.sendMessage(m.jid, {
             document: { url: finalUrl },
             mimetype: "video/mp4",
-            fileName: `${title}.mp4`,
+            fileName: `${safeTitle} - ${qualityStr}.mp4`,
             caption: caption
         }, { quoted: metaQuote });
 
-        await client.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
+        await m.react("✅");
 
-    } catch (e) {
-        console.error("Dubflix DL Error:", e.message);
-        await client.sendMessage(m.chat, { react: { text: "❌", key: m.key } });
-        await client.sendMessage(m.chat, { text: "❌ *Download Failed! ලින්ක් එක දෝෂ සහිතයි හෝ Expire වී ඇත.*" }, { quoted: m });
+    } catch (err) {
+        console.error("Direct Upload Error:", err);
+        await m.react("❌");
+        await m.reply(`❌ බාගත කර ඔබ වෙත එවීමට අපොහොසත් විය.\n_සමහරවිට මෙම චිත්‍රපටයේ ${qualityStr} සංස්කරණයක් සර්වර් එකේ නොමැත._\n\nError: ${err.message.substring(0, 80)}`);
     }
-});
+}
