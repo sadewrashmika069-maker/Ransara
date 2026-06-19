@@ -1,3 +1,7 @@
+// movie2.js
+const { Sparky, isPublic } = require("../lib"); // ✅ FIX: Import Sparky
+const axios = require("axios");
+
 // Dubflix සඳහා වෙනම Session Map එකක්
 if (!global.dubflixSessions) global.dubflixSessions = new Map();
 
@@ -174,7 +178,7 @@ for (let j = 1; j <= 3; j++) {
 }
 
 // ==========================================
-// FETCH QUALITY OPTIONS FUNCTION (FIXED)
+// FETCH QUALITY OPTIONS FUNCTION
 // ==========================================
 async function fetchDfQualityOptions(client, m, selectedMovie) {
     const movieUrl = selectedMovie.url;
@@ -196,20 +200,10 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
         const resultData = data.results;
         const title = resultData.title || selectedMovie.title;
 
-        // 1. Direct Link එකක් තියෙනවා නම්
+        // 1. Direct Link එකක් තියෙනවා නම් (Movie එකක් නම්)
         if (resultData.direct_link && resultData.direct_link !== "N/A") {
-            let baseLink = resultData.direct_link;
-            const linkType = detectLinkType(baseLink); // Mega, MediaFire, Direct, etc.
+            const baseLink = resultData.direct_link;
 
-            // Mega link නම් quality modify කරන්න බැහැ, එකම link එකයි තියෙන්නේ
-            if (linkType === 'mega') {
-                const msg = `🎬 *${title}*\n📅 Release: ${resultData.release_date || 'N/A'}\n\n📥 *Download Link:*\n${baseLink}\n\n📌 *Note:* මෙය Mega link එකකි.  ඉහත link එක ඔබගේ browser එකෙන් විවෘත කර බාගත කරගන්න.`;
-                await sendMediaOrText(client, m.jid, msg, movieImg, m);
-                await m.react("🎬");
-                return;
-            }
-
-            // Direct / MediaFire / Others: Quality options පෙන්වන්න
             let qualMsg = `🎬 *${title}*\n📅 Release: ${resultData.release_date || 'N/A'}\n\n📥 *ඔබට අවශ්‍ය Quality එක තෝරන්න:*\n\n`;
             qualMsg += `🟢 *480p* (SD Quality) ➡️ 📥 *.dm1*\n`;
             qualMsg += `🟢 *720p* (HD Quality) ➡️ 📥 *.dm2*\n`;
@@ -228,16 +222,14 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
             setTimeout(() => global.dubflixSessions.delete(m.sender), 5 * 60 * 1000);
             await m.react("🎬");
 
-        // 2. Series එකක් නම්
+        // 2. Series එකක් නම් (Direct Link එක නැත්නම්) එපිසෝඩ් ලිස්ට් එක යවනවා
         } else if (resultData.is_series && resultData.series_list && resultData.series_list.length > 0) {
             let caption = `🎬 *${title}*\n📌 *මෙය Series එකක් හෝ Collection එකකි.*\n\n👇 *පහතින් අවශ්‍ය කොටස තෝරාගන්න:*\n\n`;
             
             const filteredSeries = resultData.series_list.filter(item => !item.name.startsWith('#'));
             
             filteredSeries.forEach((episode, i) => {
-                const epLinkType = detectLinkType(episode.link);
-                const linkTypeEmoji = epLinkType === 'mega' ? '🔷' : (epLinkType === 'mediafire' ? '🔥' : '🔗');
-                caption += `*${i + 1}.* ${episode.name} ${linkTypeEmoji}\n🔗 *Command:* .df_ep ${episode.link}\n\n`;
+                caption += `*${i + 1}.* ${episode.name}\n🔗 *Command:* .df_ep ${episode.link}\n\n`;
             });
             
             caption += `_(ඉහත Command එක Copy කර යැවීමෙන් අදාළ කොටස බාගත කරගත හැක)_`;
@@ -255,20 +247,6 @@ async function fetchDfQualityOptions(client, m, selectedMovie) {
         await m.react("❌");
         await m.reply(`❌ තොරතුරු ලබා ගැනීම අසාර්ථකයි: ${err.message.substring(0, 100)}`);
     }
-}
-
-// ==========================================
-// LINK TYPE DETECTION HELPER
-// ==========================================
-function detectLinkType(url) {
-    if (!url) return 'unknown';
-    if (url.includes('mega.nz') || url.includes('mega.co.nz')) return 'mega';
-    if (url.includes('mediafire.com')) return 'mediafire';
-    if (url.includes('drive.google.com')) return 'gdrive';
-    if (url.includes('pixeldrain.com')) return 'pixeldrain';
-    if (url.includes('1fichier.com')) return '1fichier';
-    if (url.includes('uploadhaven.com')) return 'uploadhaven';
-    return 'direct';
 }
 
 // ==========================================
