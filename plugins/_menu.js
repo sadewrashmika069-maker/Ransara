@@ -10,24 +10,29 @@ if (!global.menuMsgIds) global.menuMsgIds = new Set();
 
 // Helper function to show category submenu (reused in both .menu number and reply handler)
 async function showCategoryMenu(client, m, categoryNumber, prefix) {
+    const defaultImg = config.MENU_IMAGE_URL || "https://res.cloudinary.com/dqlh378fb/image/upload/v1780590033/zanta_media_uploads/dttqjshprca9zvqcpbwg.jpg";
+
     const categoriesList = [
-        { num: 1, name: "DOWNLOAD", icon: "📥", keywords: ["download", "yt", "youtube", "facebook", "fb", "instagram", "ig", "media", "video", "audio", "tp", "ttp"] },
-        { num: 2, name: "AI", icon: "🧠", keywords: ["ai", "chatgpt", "gpt", "gemini", "bard", "chatbot", "ai chat"] },
-        { num: 3, name: "GROUP", icon: "👥", keywords: ["group", "gc", "gcast", "groupcast", "tag", "mention", "invite", "link", "group info"] },
-        { num: 4, name: "ADMIN", icon: "⚙️", keywords: ["admin", "promote", "demote", "kick", "remove", "add", "mute", "unmute", "warning", "warn"] },
-        { num: 5, name: "TOOLS", icon: "🔧", keywords: ["tool", "qr", "scanner", "shortener", "url", "converter", "sticker", "photo", "image", "take", "edit", "emo"] },
-        { num: 6, name: "OWNER", icon: "👑", keywords: ["owner", "bot", "restart", "shutdown", "update", "block", "unblock", "broadcast"] },
-        { num: 7, name: "OTHER", icon: "📁", keywords: ["fun", "game", "meme", "quote", "weather", "news", "search", "info"] },
-        { num: 8, name: "SONG", image: "https://res.cloudinary.com/dqlh378fb/image/upload/v1782010855/zanta_media_uploads/hy5xd30khptmco5hcksw.jpg", icon: "🎵", keywords: ["song", "music", "mp3", "play", "audio", "spotify", "ytmp3", "lyrics"]
-       }
+        { num: 1, name: "DOWNLOAD", image: "https://res.cloudinary.com/dqlh378fb/image/upload/v1782010878/zanta_media_uploads/k6btsgegjtnjuykb7g7f.jpg", icon: "📥", keywords: ["download", "yt", "youtube", "facebook", "fb", "instagram", "ig", "media", "video"] },
+        { num: 2, name: "AI", image: "https://res.cloudinary.com/dqlh378fb/image/upload/v1782010845/zanta_media_uploads/j4lvxxlc48np5muhyn1a.jpg", icon: "🧠", keywords: ["ai", "chatgpt", "gpt", "gemini", "bard", "chatbot", "ai chat"] },
+        { num: 3, name: "GROUP", image: defaultImg, icon: "👥", keywords: ["group", "gc", "gcast", "groupcast", "tag", "mention", "invite", "link", "group info"] },
+        { num: 4, name: "ADMIN", image: defaultImg, icon: "⚙️", keywords: ["admin", "promote", "demote", "kick", "remove", "add", "mute", "unmute", "warning", "warn"] },
+        { num: 5, name: "TOOLS", image: "https://res.cloudinary.com/dqlh378fb/image/upload/v1782010867/zanta_media_uploads/snnqp75qm9iuzouz6piu.jpg", icon: "🔧", keywords: ["tool", "qr", "scanner", "shortener", "url", "converter", "sticker", "photo", "image", "edit"] },
+        { num: 6, name: "OWNER", image: defaultImg, icon: "👑", keywords: ["owner", "bot", "restart", "shutdown", "update", "block", "unblock", "broadcast"] },
+        { num: 7, name: "OTHER", image: defaultImg, icon: "📁", keywords: ["fun", "game", "meme", "quote", "weather", "news", "search", "info"] },
+        { num: 8, name: "SONG", image: "https://res.cloudinary.com/dqlh378fb/image/upload/v1782010855/zanta_media_uploads/hy5xd30khptmco5hcksw.jpg", icon: "🎵", keywords: ["song", "music", "mp3", "play", "audio", "spotify", "ytmp3", "lyrics"] }
     ];
+    
     let selectedCat = categoriesList.find(cat => cat.num === categoryNumber);
     if (!selectedCat) return false;
 
+    let allValidCategories = categoriesList.map(c => c.name.toLowerCase());
     let catCommands = [];
+
     if (commands && Array.isArray(commands)) {
         commands.forEach(cmd => {
             if (cmd.dontAddCommandList) return;
+            
             let cmdName = cmd.name;
             let cmdNameStr = "";
             if (typeof cmdName === 'object' && cmdName && cmdName.source) {
@@ -38,19 +43,23 @@ async function showCategoryMenu(client, m, categoryNumber, prefix) {
             } else if (cmdName && typeof cmdName === 'object') {
                 cmdNameStr = Object.values(cmdName)[0] || "";
             }
+
             let cmdCategory = (cmd.category || "other").toLowerCase();
             let cmdDesc = (cmd.desc || "").toLowerCase();
             let isInCategory = false;
+            
             if (cmdCategory === selectedCat.name.toLowerCase()) {
                 isInCategory = true;
-            } else {
+            } else if (!allValidCategories.includes(cmdCategory) || cmdCategory === "other") {
                 for (let kw of selectedCat.keywords) {
-                    if (cmdDesc.includes(kw) || cmdNameStr.includes(kw)) {
+                    let exactWordRegex = new RegExp(`\\b${kw}\\b`, 'i');
+                    if (exactWordRegex.test(cmdDesc) || exactWordRegex.test(cmdNameStr)) {
                         isInCategory = true;
                         break;
                     }
                 }
             }
+
             if (isInCategory && cmdNameStr && cmdNameStr !== "unknown" && cmdNameStr !== "") {
                 if (!catCommands.includes(cmdNameStr)) catCommands.push(cmdNameStr);
             }
@@ -67,7 +76,7 @@ async function showCategoryMenu(client, m, categoryNumber, prefix) {
 `;
     if (catCommands.length > 0) {
         catCommands.sort().forEach((cmd, idx) => {
-            let num = (idx + 1).toString().padStart(2);
+            let num = (idx + 1).toString().padStart(2, '0');
             categoryMenu += `│ ${num}. ${cmd}\n`;
         });
     } else {
@@ -85,7 +94,11 @@ async function showCategoryMenu(client, m, categoryNumber, prefix) {
    ⚡ ${selectedCat.name} SECTION ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
-    await client.sendMessage(m.jid, { text: categoryMenu }, { quoted: m });
+    await client.sendMessage(m.jid, { 
+        image: { url: selectedCat.image }, 
+        caption: categoryMenu 
+    }, { quoted: m });
+    
     return true;
 }
 
@@ -97,7 +110,6 @@ Sparky({
     desc: "📋 සියලුම විධාන බලන්න - අංකයක් එවන්න"
 }, async ({ client, m, args }) => {
     try {
-        // Handle number input (with prefix) like .menu 1
         let userInput = "";
         if (args && Array.isArray(args)) {
             userInput = args.join(" ").trim();
@@ -115,7 +127,6 @@ Sparky({
             return;
         }
         
-        // Show main menu with image
         let uptime = await m.uptime();
         let now = new Date();
         let date = now.toLocaleDateString("en-IN", { timeZone: "Asia/Colombo" });
@@ -145,17 +156,17 @@ Sparky({
 │        📚 CATEGORIES             │
 ├──────────────────────────────────┤
 │                                  
-│  1. 📥 DOWNLOAD MENU              
-│     YT, FB, IG වීඩියෝ           
+│  1. 📥 DOWNLOAD MENU             
+│     YT, FB, IG වීඩියෝ            
 │
-│  2. 🧠 AI MENU                    
-│     ChatGPT, Gemini, Bot          
+│  2. 🧠 AI MENU                   
+│     ChatGPT, Gemini, Bot         
 │
 │  3. 👥 GROUP MENU                 
 │     Group එක manage කරන්න         
 │
 │  4. ⚙️ ADMIN MENU                 
-│     Admin වැඩ කටයුතු             
+│     Admin වැඩ කටයුතු              
 │
 │  5. 🔧 TOOLS MENU                 
 │     Sticker, QR, Converter        
@@ -166,13 +177,16 @@ Sparky({
 │  7. 📁 OTHER MENU                 
 │     වෙනත් විධාන                  
 │
+│  8. 🎵 SONG MENU                 
+│     සින්දු බාගත කිරීම්            
+│
 └──────────────────────────────────┘
 
 ┌──────────────────────────────────┐
 │         💡 HOW TO USE             │
 ├──────────────────────────────────┤
 │                                  
-│  📌 *අංකයක් එවන්න* :               
+│  📌 *අංකයක් එවන්න* :                
 │                                  
 │     • ${m.prefix || "."}menu 1  → DOWNLOAD
 │     • ${m.prefix || "."}menu 2  → AI
@@ -181,6 +195,7 @@ Sparky({
 │     • ${m.prefix || "."}menu 5  → TOOLS
 │     • ${m.prefix || "."}menu 6  → OWNER
 │     • ${m.prefix || "."}menu 7  → OTHER
+│     • ${m.prefix || "."}menu 8  → SONG
 │
 │  🆕 *නැත්නම්:* මෙම පණිවිඩයට *Reply* කර අංකය පමණක් එවන්න.
 │     (උදා: Reply with "1" → DOWNLOAD menu)
@@ -199,9 +214,7 @@ Sparky({
             caption: mainMenu
         }, { quoted: m });
         
-        // Store the message ID so that replies can be recognized
         global.menuMsgIds.add(sentMsg.key.id);
-        // Auto-remove after 5 minutes to avoid memory leak
         setTimeout(() => global.menuMsgIds.delete(sentMsg.key.id), 5 * 60 * 1000);
         
     } catch (e) {
@@ -211,25 +224,22 @@ Sparky({
     }
 });
 
-// Command to capture replies with just a number (no prefix) to the main menu
+// Command to capture replies with just a number
 Sparky({
     name: "menureply",
     pattern: /^\d+$/,
-    dontPrefix: true,   // allows raw number without dot
+    dontPrefix: true, 
     fromMe: false,
     dontAddCommandList: true,
     desc: "Internal handler for menu number replies"
 }, async ({ client, m, args }) => {
-    // Must be a reply to a message
     if (!m.quoted) return;
     const quotedId = m.quoted.key.id;
-    // Check if the quoted message is a main menu message we stored
     if (!global.menuMsgIds || !global.menuMsgIds.has(quotedId)) return;
     
-    const number = parseInt(args[0]);
-    if (isNaN(number) || number < 1 || number > 7) return;
+    const number = parseInt(m.text || args[0]);
+    if (isNaN(number) || number < 1 || number > 8) return;
     
-    // Show the category submenu
     const prefix = m.prefix || ".";
     await showCategoryMenu(client, m, number, prefix);
 });
