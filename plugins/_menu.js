@@ -152,35 +152,16 @@ Sparky({
 │ 🔰 පෙරවරු : ${m.prefix || "."}
 └──────────────────────────────────┘
 
-┌──────────────────────────────────┐
-│        📚 CATEGORIES             │
-├──────────────────────────────────┤
-│                                  
-│  1. 📥 DOWNLOAD MENU             
-│     YT, FB, IG වීඩියෝ            
-│
-│  2. 🧠 AI MENU                   
-│     ChatGPT, Gemini, Bot         
-│
-│  3. 👥 GROUP MENU                 
-│     Group එක manage කරන්න         
-│
-│  4. ⚙️ ADMIN MENU                 
-│     Admin වැඩ කටයුතු              
-│
-│  5. 🔧 TOOLS MENU                 
-│     Sticker, QR, Converter        
-│
-│  6. 👑 OWNER MENU                 
-│     Bot පාලනය සඳහා              
-│
-│  7. 📁 OTHER MENU                 
-│     වෙනත් විධාන                  
-│
-│  8. 🎵 SONG MENU                 
-│     සින්දු බාගත කිරීම්            
-│
-└──────────────────────────────────┘
+┏━━━━『 𝐂𝐀𝐓𝐄𝐆𝐎𝐑𝐈𝐄𝐒 』━━━━━
+┣⪼ ❖ 1. 📥 Download Menu
+┣⪼ ❖ 2. 🧠 AI Commands
+┣⪼ ❖ 3. 👥 Group Manage
+┣⪼ ❖ 4. ⚙️ Admin Menu
+┣⪼ ❖ 5. 🔧 Tools & Edits
+┣⪼ ❖ 6. 👑 Owner Area
+┣⪼ ❖ 7. 📁 Other Cmds
+┣⪼ ❖ 8. 🎵 Song & Music
+┗━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ┌──────────────────────────────────┐
 │         💡 HOW TO USE             │
