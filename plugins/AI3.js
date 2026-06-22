@@ -3,9 +3,9 @@ const FormData = require("form-data");
 const { Sparky } = require("../lib");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 
-// 🔴 API URLs 
-const TEXT_API_URL = process.env.WHITESHADOW_API_TOKEN ? "https://whiteshadow-x-api.onrender.com/api/ai/gemini" : "https://api.bk9.site/ai/gemini"; 
-const VISION_API_URL = "https://api.bk9.site/ai/geminiimg";
+// 🔴 API URLs - GitHub Actions වලට වැඩ කරන ඒවා!
+const TEXT_API_URL = "https://whiteshadow-x-api.onrender.com/api/ai/gemini"; // ඔයාගේ පරණ වැඩ කරපු API එක
+const VISION_API_URL = "https://api.joshweb.click/api/gemini-vision"; // Cloudflare නැති අලුත් Vision API එක
 
 const API_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 40000);
@@ -42,7 +42,7 @@ function extractTextFromObject(value, depth = 0) {
     }
     if (typeof value !== "object") return "";
 
-    const priorityKeys = ["BK9", "result", "response", "answer", "message", "text", "content", "reply", "output", "data"];
+    const priorityKeys = ["result", "response", "answer", "message", "text", "content", "reply", "output", "data"];
     for (const key of priorityKeys) {
         if (value[key]) {
             const found = extractTextFromObject(value[key], depth + 1);
@@ -73,29 +73,48 @@ async function downloadMedia(message, type) {
     return buffer;
 }
 
+// 2. අලුත් Image Uploader එක (Headers එක්ක)
 async function uploadImage(buffer) {
     try {
         let form = new FormData();
         form.append("reqtype", "fileupload");
         form.append("fileToUpload", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
         
+        // Catbox එකට යවනවා Browser එකකින් වගේ
         let { data } = await axios.post("https://catbox.moe/user/api.php", form, {
-            headers: form.getHeaders()
+            headers: {
+                ...form.getHeaders(),
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+            }
         });
-        
         return data; 
     } catch (e) {
-        throw new Error("Image Upload Failed (Catbox Error)");
+        try {
+            // Catbox වැඩ නැත්නම් Uguu එකට යවනවා (Backup Plan)
+            let form2 = new FormData();
+            form2.append("files[]", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
+            
+            let { data } = await axios.post("https://uguu.se/upload.php", form2, {
+                headers: {
+                    ...form2.getHeaders(),
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                }
+            });
+            return data.files[0].url;
+        } catch (err) {
+            throw new Error("සියලුම Image Upload සර්වර් අක්‍රියයි.");
+        }
     }
 }
 
+// 3. සාමාන්‍ය Text ප්‍රශ්න (ඔයාගේ පරණ API එකමයි)
 async function askGeminiText(prompt) {
     const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
     const { data } = await axios.get(TEXT_API_URL, {
         timeout: REQUEST_TIMEOUT_MS,
         params: { q: q, apitoken: API_TOKEN },
         headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
         }
     });
     const answer = extractTextFromObject(data);
@@ -103,13 +122,14 @@ async function askGeminiText(prompt) {
     return answer;
 }
 
+// 4. ෆොටෝ එක්ක ප්‍රශ්න (JoshWeb API එක)
 async function askGeminiVision(prompt, imageUrl) {
     const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
     const { data } = await axios.get(VISION_API_URL, {
         timeout: REQUEST_TIMEOUT_MS,
         params: { q: q, url: imageUrl },
         headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
         }
     });
     const answer = extractTextFromObject(data);
@@ -123,7 +143,7 @@ Sparky({
     name: "ai3", 
     fromMe: false,
     category: "ai",
-    desc: "Chat with AI3 (Gemini Vision) in Sinhala-English mixed style (Supports Images).",
+    desc: "Chat with AI3 (Gemini Vision) in Sinhala-English mixed style.",
 }, async ({ m, client, args }) => {
     
     let prompt = getPrompt(args, m);
@@ -169,6 +189,6 @@ Sparky({
     } catch (error) {
         console.error("ai3 command error:", error);
         await safeReact(m, EMOJI_ERROR);
-        return sendText(m, client, `${EMOJI_ERROR} AI3 reply eka ganna bari una.\nReason: ${error?.response?.data?.message || error.message || "Unknown Error"}`);
+        return sendText(m, client, `${EMOJI_ERROR} AI3 Error.\nReason: ${error?.response?.data?.message || error.message || "Unknown Error"}`);
     }
-}); // 🔴 මේ අන්තිම පේළිය අනිවාර්යයෙන්ම තියෙන්න ඕනේ!
+});
