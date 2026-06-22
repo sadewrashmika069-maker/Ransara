@@ -53,7 +53,7 @@ Sparky({
             await client.sendMessage(m.jid, { text: text });
             
             // සේෆ්ටි එකට තත්පර බාගයක විරාමයක්
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
 
     } catch (e) {
