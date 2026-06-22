@@ -3,9 +3,9 @@ const FormData = require("form-data");
 const { Sparky } = require("../lib");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 
-// 🔴 අලුත් API URLs
-const TEXT_API_URL = process.env.WHITESHADOW_API_TOKEN ? "https://whiteshadow-x-api.onrender.com/api/ai/gemini" : "https://api.ryzendesu.vip/api/ai/gemini"; 
-const VISION_API_URL = "https://api.ryzendesu.vip/api/ai/gemini-vision"; // 🔴 අලුත්ම නොමැරෙන Vision API එක
+// 🔴 API URLs (HTML Challenge ඉල්ලන්නේ නැති සර්වර් දෙකක්!)
+const TEXT_API_URL = process.env.WHITESHADOW_API_TOKEN ? "https://whiteshadow-x-api.onrender.com/api/ai/gemini" : "https://api.bk9.site/ai/gemini"; 
+const VISION_API_URL = "https://api.bk9.site/ai/geminiimg";
 
 const API_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 40000);
@@ -23,11 +23,16 @@ function getJid(m) {
 }
 
 function getPrompt(args, m) {
-    if (Array.isArray(args) && args.length) return args.join(" ").trim();
-    if (typeof args === "string" && args.trim()) return args.trim();
-    if (m?.quoted?.text) return m.quoted.text.trim();
-    if (m?.text) return m.text.replace(/^[./!#]ai3\s*/i, "").trim();
-    return "";
+    let text = "";
+    if (Array.isArray(args) && args.length) text = args.join(" ").trim();
+    else if (typeof args === "string" && args.trim()) text = args.trim();
+    else if (m?.text) text = m.text.replace(/^[./!#]ai3\s*/i, "").trim();
+
+    if (!text && m?.quoted?.text) {
+        text = m.quoted.text.trim();
+    }
+    
+    return text; // කිසිම Limit එකක් නෑ!
 }
 
 function extractTextFromObject(value, depth = 0) {
@@ -42,7 +47,7 @@ function extractTextFromObject(value, depth = 0) {
     }
     if (typeof value !== "object") return "";
 
-    const priorityKeys = ["result", "response", "answer", "message", "text", "content", "reply", "output", "data"];
+    const priorityKeys = ["BK9", "result", "response", "answer", "message", "text", "content", "reply", "output", "data"];
     for (const key of priorityKeys) {
         if (value[key]) {
             const found = extractTextFromObject(value[key], depth + 1);
@@ -73,7 +78,7 @@ async function downloadMedia(message, type) {
     return buffer;
 }
 
-// 🔴 Image Uploading (Uguu + Tmpfiles)
+// 🔴 උඹේ tourl Uploader එක
 async function uploadImageToUrl(buffer, mimeType) {
     const ext = mimeType.split("/")[1] || "jpeg";
     const filename = `file_${Date.now()}.${ext}`;
@@ -116,20 +121,28 @@ async function askGeminiText(prompt) {
         params: { q: q, apitoken: API_TOKEN },
         headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     });
+
+    if (typeof data === "string" && data.trim().startsWith("<")) {
+        throw new Error("Cloudflare Security Block (HTML)");
+    }
+
     const answer = extractTextFromObject(data);
     if (!answer) throw new Error("API response is empty.");
     return answer;
 }
 
-// 🔴 අලුත් Vision API එකට යවන තැන
 async function askGeminiVision(prompt, imageUrl) {
     const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
     const { data } = await axios.get(VISION_API_URL, {
         timeout: REQUEST_TIMEOUT_MS,
-        // Free APIs සමහරක් 'text' ගන්නවා, සමහරක් 'q' ගන්නවා. ඒක නිසා දෙකම යවනවා වැඩේ 100% ෂුවර් වෙන්න.
-        params: { text: q, prompt: q, q: q, url: imageUrl },
+        params: { q: q, url: imageUrl },
         headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     });
+
+    if (typeof data === "string" && data.trim().startsWith("<")) {
+        throw new Error("API Server blocked the request (HTML returned).");
+    }
+
     const answer = extractTextFromObject(data);
     if (!answer) throw new Error("Vision API response is empty.");
     return answer;
@@ -189,7 +202,6 @@ Sparky({
     } catch (error) {
         console.error("ai3 command error:", error);
         await safeReact(m, EMOJI_ERROR);
-        // අලුත් Error එක හරියටම බලාගන්න Error Message එක හදලා තියෙන්නේ
         const errMsg = error?.response?.data?.message || error?.response?.statusText || error.message || "Unknown Error";
         return sendText(m, client, `${EMOJI_ERROR} AI3 Error.\nReason: ${errMsg}`);
     }
