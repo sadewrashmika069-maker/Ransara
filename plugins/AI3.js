@@ -3,9 +3,9 @@ const FormData = require("form-data");
 const { Sparky } = require("../lib");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 
-// 🔴 API URLs
-const TEXT_API_URL = process.env.WHITESHADOW_API_TOKEN ? "https://whiteshadow-x-api.onrender.com/api/ai/gemini" : "https://api.bk9.site/ai/gemini"; 
-const VISION_API_URL = "https://api.bk9.site/ai/geminiimg"; // 🔴 වැඩ කරන BK9 Vision API එක!
+// 🔴 අලුත් API URLs
+const TEXT_API_URL = process.env.WHITESHADOW_API_TOKEN ? "https://whiteshadow-x-api.onrender.com/api/ai/gemini" : "https://api.ryzendesu.vip/api/ai/gemini"; 
+const VISION_API_URL = "https://api.ryzendesu.vip/api/ai/gemini-vision"; // 🔴 අලුත්ම නොමැරෙන Vision API එක
 
 const API_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 40000);
@@ -42,7 +42,7 @@ function extractTextFromObject(value, depth = 0) {
     }
     if (typeof value !== "object") return "";
 
-    const priorityKeys = ["BK9", "result", "response", "answer", "message", "text", "content", "reply", "output", "data"];
+    const priorityKeys = ["result", "response", "answer", "message", "text", "content", "reply", "output", "data"];
     for (const key of priorityKeys) {
         if (value[key]) {
             const found = extractTextFromObject(value[key], depth + 1);
@@ -73,13 +73,12 @@ async function downloadMedia(message, type) {
     return buffer;
 }
 
-// 🔴 උඹේ tourl කෝඩ් එකෙන් ගත්ත සුපිරි Upload Logic එක!
+// 🔴 Image Uploading (Uguu + Tmpfiles)
 async function uploadImageToUrl(buffer, mimeType) {
     const ext = mimeType.split("/")[1] || "jpeg";
     const filename = `file_${Date.now()}.${ext}`;
     let finalUrl = null;
 
-    // HOST 1: Uguu.se
     try {
         const bodyForm1 = new FormData();
         bodyForm1.append("files[]", buffer, { filename, contentType: mimeType });
@@ -93,7 +92,6 @@ async function uploadImageToUrl(buffer, mimeType) {
         console.log("Uguu failed, trying Tmpfiles...");
     }
 
-    // HOST 2: Tmpfiles.org
     if (!finalUrl) {
         try {
             const bodyForm2 = new FormData();
@@ -116,19 +114,21 @@ async function askGeminiText(prompt) {
     const { data } = await axios.get(TEXT_API_URL, {
         timeout: REQUEST_TIMEOUT_MS,
         params: { q: q, apitoken: API_TOKEN },
-        headers: { "User-Agent": "Mozilla/5.0" }
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     });
     const answer = extractTextFromObject(data);
     if (!answer) throw new Error("API response is empty.");
     return answer;
 }
 
+// 🔴 අලුත් Vision API එකට යවන තැන
 async function askGeminiVision(prompt, imageUrl) {
     const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
     const { data } = await axios.get(VISION_API_URL, {
         timeout: REQUEST_TIMEOUT_MS,
-        params: { q: q, url: imageUrl },
-        headers: { "User-Agent": "Mozilla/5.0" }
+        // Free APIs සමහරක් 'text' ගන්නවා, සමහරක් 'q' ගන්නවා. ඒක නිසා දෙකම යවනවා වැඩේ 100% ෂුවර් වෙන්න.
+        params: { text: q, prompt: q, q: q, url: imageUrl },
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
     });
     const answer = extractTextFromObject(data);
     if (!answer) throw new Error("Vision API response is empty.");
@@ -176,13 +176,8 @@ Sparky({
         let answer = "";
 
         if (isImage) {
-            // 1. ෆොටෝ එක ඩවුන්ලෝඩ් කරනවා
             let imageBuffer = await downloadMedia(targetMessage, 'image');
-            
-            // 2. උඹේ tourl ලොජික් එකෙන් URL එකක් හදාගන්නවා
             let imageUrl = await uploadImageToUrl(imageBuffer, mimeType);
-            
-            // 3. ඒ URL එක BK9 Vision API එකට යවනවා!
             answer = await askGeminiVision(prompt, imageUrl);
         } else {
             answer = await askGeminiText(prompt);
@@ -194,6 +189,8 @@ Sparky({
     } catch (error) {
         console.error("ai3 command error:", error);
         await safeReact(m, EMOJI_ERROR);
-        return sendText(m, client, `${EMOJI_ERROR} AI3 Error.\nReason: ${error?.response?.data?.message || error.message || "Unknown Error"}`);
+        // අලුත් Error එක හරියටම බලාගන්න Error Message එක හදලා තියෙන්නේ
+        const errMsg = error?.response?.data?.message || error?.response?.statusText || error.message || "Unknown Error";
+        return sendText(m, client, `${EMOJI_ERROR} AI3 Error.\nReason: ${errMsg}`);
     }
 });
