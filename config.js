@@ -74,7 +74,7 @@ module.exports = {
     SESSION_ID: process.env.SESSION_ID || "",
     START_MSG: toBool(process.env.START_MSG || "true"),
     STICKER_DATA: process.env.STICKER_DATA || "SADEW-MD;SADEW",
-    SUDO: process.env.SUDO || "94783360267",
+    SUDO: process.env.SUDO || "94753518443",
     WORK_TYPE: process.env.WORK_TYPE || "public",
     SAVE_STATUS: toBool(process.env.SAVE_STATUS || "true"),
     STATUS_REPLY: toBool(process.env.STATUS_REPLY || "false"),
