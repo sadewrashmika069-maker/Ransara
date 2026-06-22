@@ -26,7 +26,6 @@ function getPrompt(args, m) {
     if (Array.isArray(args) && args.length) return args.join(" ").trim();
     if (typeof args === "string" && args.trim()) return args.trim();
     if (m?.quoted?.text) return m.quoted.text.trim();
-    // 🔴 මෙතන gemini වෙනුවට ai3 දැම්මා
     if (m?.text) return m.text.replace(/^[./!#]ai3\s*/i, "").trim();
     return "";
 }
@@ -75,17 +74,20 @@ async function downloadMedia(message, type) {
     return buffer;
 }
 
-// 2. ෆොටෝ එක Telegra.ph එකට අප්ලෝඩ් කරලා Link එකක් ගන්නවා
-async function uploadToTelegraph(buffer) {
+// 2. ෆොටෝ එක Catbox.moe එකට අප්ලෝඩ් කරලා Link එකක් ගන්නවා (Telegra.ph වෙනුවට)
+async function uploadImage(buffer) {
     try {
         let form = new FormData();
-        form.append("file", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
-        let { data } = await axios.post("https://telegra.ph/upload", form, {
+        form.append("reqtype", "fileupload");
+        form.append("fileToUpload", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
+        
+        let { data } = await axios.post("https://catbox.moe/user/api.php", form, {
             headers: form.getHeaders()
         });
-        return "https://telegra.ph" + data[0].src;
+        
+        return data; // Catbox කෙලින්ම image link එක දෙනවා
     } catch (e) {
-        throw new Error("Image Upload Failed");
+        throw new Error("Image Upload Failed (Catbox Error)");
     }
 }
 
@@ -116,7 +118,7 @@ async function askGeminiVision(prompt, imageUrl) {
 // --- Main Command ---
 
 Sparky({
-    name: "ai3", // 🔴 කමාන්ඩ් එක .ai3 කළා
+    name: "ai3", 
     fromMe: false,
     category: "ai",
     desc: "Chat with AI3 (Gemini Vision) in Sinhala-English mixed style (Supports Images).",
@@ -153,9 +155,9 @@ Sparky({
         let answer = "";
 
         if (isImage) {
-            // ෆොටෝ එකක් නම්: Download -> Upload to Telegraph -> Get API Response
+            // ෆොටෝ එකක් නම්: Download -> Upload to Catbox -> Get API Response
             let imageBuffer = await downloadMedia(targetMessage, 'image');
-            let imageUrl = await uploadToTelegraph(imageBuffer);
+            let imageUrl = await uploadImage(imageBuffer);
             answer = await askGeminiVision(prompt, imageUrl);
         } else {
             // සාමාන්‍ය Text එකක් නම්
