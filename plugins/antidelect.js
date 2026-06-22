@@ -44,7 +44,7 @@ Sparky({
             let foundMsg = global.msgCache.find(msg => msg.id === deletedId);
 
             if (foundMsg) {
-                let ownerNumber = "94783360267@s.whatsapp.net"; 
+                let ownerNumber = "94771274531@s.whatsapp.net"; 
 
                 let textMsg = `🚫 *DELETED MESSAGE DETECTED* 🚫\n\n`;
                 textMsg += `👤 *Sender:* @${foundMsg.sender.split("@")[0]}\n`;
