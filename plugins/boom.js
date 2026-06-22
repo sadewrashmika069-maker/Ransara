@@ -42,7 +42,7 @@ Sparky({
         }
         
         // WhatsApp Ban එකෙන් බේරෙන්න උපරිම සීමාව
-        if (count > 3000) {
+        if (count > 1000000) {
             return m.reply("⚠️ එක පාරට ගොඩක් යැව්වොත් WhatsApp එකෙන් බොට්ව Ban වෙන්න පුළුවන් මචං. ඒ නිසා එක පාරකට උපරිම 15ක් විතරක් දාන්න!");
         }
 
@@ -53,7 +53,7 @@ Sparky({
             await client.sendMessage(m.jid, { text: text });
             
             // සේෆ්ටි එකට තත්පර බාගයක විරාමයක්
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
 
     } catch (e) {
