@@ -3,10 +3,6 @@ const FormData = require("form-data");
 const { Sparky } = require("../lib");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 
-// 🔴 API URLs (HTML Challenge ඉල්ලන්නේ නැති සර්වර් දෙකක්!)
-const TEXT_API_URL = process.env.WHITESHADOW_API_TOKEN ? "https://whiteshadow-x-api.onrender.com/api/ai/gemini" : "https://api.bk9.site/ai/gemini"; 
-const VISION_API_URL = "https://api.bk9.site/ai/geminiimg";
-
 const API_TOKEN = process.env.WHITESHADOW_API_TOKEN || "VK4fry";
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 40000);
 
@@ -31,8 +27,7 @@ function getPrompt(args, m) {
     if (!text && m?.quoted?.text) {
         text = m.quoted.text.trim();
     }
-    
-    return text; // කිසිම Limit එකක් නෑ!
+    return text; 
 }
 
 function extractTextFromObject(value, depth = 0) {
@@ -78,7 +73,7 @@ async function downloadMedia(message, type) {
     return buffer;
 }
 
-// 🔴 උඹේ tourl Uploader එක
+// Image Uploader (Uguu + Tmpfiles)
 async function uploadImageToUrl(buffer, mimeType) {
     const ext = mimeType.split("/")[1] || "jpeg";
     const filename = `file_${Date.now()}.${ext}`;
@@ -90,9 +85,7 @@ async function uploadImageToUrl(buffer, mimeType) {
         const res1 = await axios.post("https://uguu.se/api.php?d=upload-tool", bodyForm1, {
             headers: bodyForm1.getHeaders()
         });
-        if (res1.data && res1.data.includes("http")) {
-            finalUrl = res1.data.trim();
-        }
+        if (res1.data && res1.data.includes("http")) finalUrl = res1.data.trim();
     } catch (e) {
         console.log("Uguu failed, trying Tmpfiles...");
     }
@@ -114,38 +107,62 @@ async function uploadImageToUrl(buffer, mimeType) {
     return finalUrl;
 }
 
+// 🔴 MULTI-API SYSTEM FOR TEXT
 async function askGeminiText(prompt) {
     const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
-    const { data } = await axios.get(TEXT_API_URL, {
-        timeout: REQUEST_TIMEOUT_MS,
-        params: { q: q, apitoken: API_TOKEN },
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-    });
+    const apiList = [
+        { url: "https://api.siputzx.my.id/api/ai/gemini", params: { content: q } },
+        { url: "https://api.giftedtech.my.id/api/ai/geminiai", params: { apikey: "gifted", q: q } },
+        { url: "https://whiteshadow-x-api.onrender.com/api/ai/gemini", params: { q: q, apitoken: API_TOKEN } }
+    ];
 
-    if (typeof data === "string" && data.trim().startsWith("<")) {
-        throw new Error("Cloudflare Security Block (HTML)");
+    for (let api of apiList) {
+        try {
+            const { data } = await axios.get(api.url, {
+                timeout: REQUEST_TIMEOUT_MS,
+                params: api.params,
+                headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" }
+            });
+            
+            // HTML ආවොත් මේ API එක අතෑරලා ඊළඟ එකට යනවා
+            if (typeof data === "string" && data.trim().startsWith("<")) continue;
+            
+            const answer = extractTextFromObject(data);
+            if (answer) return answer;
+        } catch (e) {
+            continue; // Error ආවොත් ඊළඟ API එක ට්‍රයි කරනවා
+        }
     }
-
-    const answer = extractTextFromObject(data);
-    if (!answer) throw new Error("API response is empty.");
-    return answer;
+    throw new Error("සියලුම AI සර්වර් මේ මොහොතේ කාර්යබහුලයි හෝ අවහිර කර ඇත.");
 }
 
+// 🔴 MULTI-API SYSTEM FOR VISION (IMAGES)
 async function askGeminiVision(prompt, imageUrl) {
     const q = `${prompt}\n\n${STYLE_INSTRUCTION}`;
-    const { data } = await axios.get(VISION_API_URL, {
-        timeout: REQUEST_TIMEOUT_MS,
-        params: { q: q, url: imageUrl },
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-    });
+    const apiList = [
+        { url: "https://api.siputzx.my.id/api/ai/gemini-image", params: { url: imageUrl, text: q } },
+        { url: "https://api.yanzbotz.my.id/api/ai/geminiImage", params: { url: imageUrl, query: q } },
+        { url: "https://api.bk9.site/ai/geminiimg", params: { q: q, url: imageUrl } }
+    ];
 
-    if (typeof data === "string" && data.trim().startsWith("<")) {
-        throw new Error("API Server blocked the request (HTML returned).");
+    for (let api of apiList) {
+        try {
+            const { data } = await axios.get(api.url, {
+                timeout: REQUEST_TIMEOUT_MS,
+                params: api.params,
+                headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" }
+            });
+
+            // HTML ආවොත් මේ API එක අතෑරලා ඊළඟ එකට යනවා
+            if (typeof data === "string" && data.trim().startsWith("<")) continue;
+
+            const answer = extractTextFromObject(data);
+            if (answer) return answer;
+        } catch (e) {
+            continue; // Error ආවොත් ඊළඟ API එක ට්‍රයි කරනවා
+        }
     }
-
-    const answer = extractTextFromObject(data);
-    if (!answer) throw new Error("Vision API response is empty.");
-    return answer;
+    throw new Error("සියලුම Image Vision සර්වර් මේ මොහොතේ කාර්යබහුලයි හෝ අවහිර කර ඇත.");
 }
 
 // --- Main Command ---
